@@ -37,24 +37,35 @@ async def generate_document_summary(full_text: str) -> str:
 
 async def process_single_drug(drug_info: dict):
     """
-    Runs the full analysis pipeline for a single drug entry extracted from the document.
+    Processes a single drug through the complete analysis pipeline.
+    Returns comprehensive data including normalization, regulatory checks, and literature.
     """
     source_name = drug_info.get("drug_name_source")
     if not source_name:
+        print(f"Skipping drug with no source name: {drug_info}")
         return None
 
+    print(f"Processing drug: {source_name}")
+    
     normalization_result = await drug_normalizer.normalize_drug(source_name)
     inn_name = normalization_result.get("inn_name")
 
     if not inn_name:
+        print(f"No INN found for {source_name}, returning partial data")
         return {
             "source_data": drug_info,
             "normalization": normalization_result,
-            "regulatory_checks": None,
-            "pubmed_articles": None,
-            "ai_analysis": None
+            "regulatory_checks": {"regulatory_checks": {}, "dosage_check": {}},
+            "pubmed_articles": [],
+            "ai_analysis": {
+                "ud_ai_grade": "Unknown",
+                "ud_ai_justification": "Не удалось определить МНН препарата",
+                "ai_summary_note": "Требуется ручная проверка названия препарата"
+            }
         }
 
+    print(f"Found INN: {inn_name}, proceeding with full analysis")
+    
     regulatory_task = regulatory_checker.check_all_regulators(
         inn_name=inn_name,
         source_dosage=drug_info.get("dosage_source", "")
@@ -65,7 +76,26 @@ async def process_single_drug(drug_info: dict):
         disease_context=drug_info.get("context_indication", "")
     )
 
-    regulatory_results, pubmed_articles = await asyncio.gather(regulatory_task, pubmed_task)
+    try:
+        regulatory_results, pubmed_articles = await asyncio.gather(
+            regulatory_task, 
+            pubmed_task, 
+            return_exceptions=True
+        )
+        
+        # Handle exceptions in results
+        if isinstance(regulatory_results, Exception):
+            print(f"Regulatory check failed: {regulatory_results}")
+            regulatory_results = {"regulatory_checks": {}, "dosage_check": {}}
+            
+        if isinstance(pubmed_articles, Exception):
+            print(f"PubMed search failed: {pubmed_articles}")
+            pubmed_articles = []
+            
+    except Exception as e:
+        print(f"Error in parallel tasks: {e}")
+        regulatory_results = {"regulatory_checks": {}, "dosage_check": {}}
+        pubmed_articles = []
 
     full_drug_data = {
         "source_data": drug_info,
@@ -74,8 +104,19 @@ async def process_single_drug(drug_info: dict):
         "pubmed_articles": pubmed_articles,
     }
 
-    final_analysis = await ai_analyzer.generate_ai_analysis(full_drug_data)
+    try:
+        final_analysis = await ai_analyzer.generate_ai_analysis(full_drug_data)
+    except Exception as e:
+        print(f"AI analysis failed for {source_name}: {e}")
+        final_analysis = {
+            "ud_ai_grade": "Error",
+            "ud_ai_justification": "Ошибка при генерации анализа",
+            "ai_summary_note": "Не удалось сгенерировать анализ"
+        }
+        
     full_drug_data["ai_analysis"] = final_analysis
+    
+    print(f"Completed analysis for: {source_name}")
 
     return full_drug_data
 

@@ -198,35 +198,54 @@ def robust_json_parse(raw_text: str) -> dict:
 
 async def extract_drugs_from_text(text: str) -> list:
     """
-    Uses Gemini with JSON schema to extract drug information from clinical protocol text.
-    Following the demo approach for better reliability.
+    Uses Gemini to extract drug information from clinical protocol text.
+    Optimized for Russian medical documents with robust error handling.
     """
     if not text or not text.strip():
         return []
 
-    prompt = get_extraction_prompt(text)
+    # Use a more focused prompt similar to demo
+    prompt = f"""Проанализируй следующий текст клинического протокола и извлеки ВСЕ упоминания лекарственных средств.
+
+Для каждого препарата укажи:
+- name: точное название как в тексте
+- innEnglish: МНН на английском (если можешь определить)
+- dosage: дозировка с единицами измерения
+- route: путь введения (кратко)
+- frequency: частота приема
+- duration: продолжительность лечения
+
+ВАЖНО: Ищи ВСЕ препараты, включая:
+- Торговые названия
+- МНН
+- Препараты в составе схем лечения
+- Сопутствующую терапию
+- Профилактические препараты
+
+Текст протокола:
+---
+{text[:50000]}
+---
+
+Верни результат в JSON формате."""
     
     try:
-        # Configure the model to use JSON schema - following demo
-        model_with_schema = genai.GenerativeModel(
+        # Use simpler model configuration like in demo
+        model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
             generation_config={
                 "temperature": 0.1,
-                "top_p": 1,
-                "top_k": 1,
-                "max_output_tokens": 8192,
-                "response_mime_type": "application/json",
-                "response_schema": get_extraction_schema()
+                "max_output_tokens": 8192
             }
         )
         
-        response = await model_with_schema.generate_content_async(prompt)
+        response = await model.generate_content_async(prompt)
         
         if not response or not response.text:
             print("Empty response from Gemini")
             return []
         
-        print(f"Raw Gemini response: {response.text[:500]}...")
+        print(f"Gemini response length: {len(response.text)} chars")
         
         # Parse the JSON response with robust parsing
         result_data = robust_json_parse(response.text)

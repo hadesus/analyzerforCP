@@ -17,32 +17,39 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage, setCurrent
     formData.append('file', file);
 
     try {
-      // Simulate progress updates
+      // More realistic progress simulation
+      let currentProgress = 0;
       const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + Math.random() * 10, 90));
-      }, 1000);
+        currentProgress += Math.random() * 5 + 2; // 2-7% increments
+        setProgress(Math.min(currentProgress, 85));
+      }, 800);
 
-      setCurrentStage('extraction');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Stage progression with realistic timing
+      setTimeout(() => setCurrentStage('extraction'), 1000);
+      setTimeout(() => setProgress(20), 1500);
       
-      setCurrentStage('normalization');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      setTimeout(() => setCurrentStage('normalization'), 3000);
+      setTimeout(() => setProgress(35), 3500);
       
-      setCurrentStage('regulatory');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      setTimeout(() => setCurrentStage('regulatory'), 5000);
+      setTimeout(() => setProgress(50), 5500);
       
-      setCurrentStage('pubmed');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      setTimeout(() => setCurrentStage('pubmed'), 7000);
+      setTimeout(() => setProgress(65), 7500);
       
-      setCurrentStage('analysis');
+      setTimeout(() => setCurrentStage('analysis'), 9000);
+      setTimeout(() => setProgress(80), 9500);
 
       const response = await axios.post('http://localhost:8000/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000, // 5 minutes
+        timeout: 600000, // 10 minutes for complex documents
       });
       
       clearInterval(progressInterval);
       setProgress(100);
+      
+      // Small delay to show 100% completion
+      await new Promise(resolve => setTimeout(resolve, 500));
       onUploadSuccess(response.data);
     } catch (error) {
       let message = 'Произошла непредвиденная ошибка.';

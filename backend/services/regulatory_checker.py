@@ -107,28 +107,35 @@ async def _check_ema(inn_name: str, client: httpx.AsyncClient) -> dict:
         return {"status": "Error"}
 
 async def _check_with_gemini(inn_name: str, regulator: str) -> dict:
-    """Checks drug status against a regulator using Gemini with JSON schema."""
-    prompt = f"""
-    Проверь статус препарата с международным непатентованным наименованием '{inn_name}' 
+    """Checks drug status against a regulator using Gemini."""
+    prompt = f"""Проверь статус препарата с МНН '{inn_name}' 
     в регуляторном органе '{regulator}'.
     
-    Предоставь:
+    Верни в JSON формате:
     - status: "Approved", "Not Approved", или "Unknown"
-    - note: краткая заметка на русском языке (1 предложение)
-    """
+    - note: краткая заметка на русском языке (1 предложение)"""
     
     try:
-        model_with_schema = genai.GenerativeModel(
+        model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
-            generation_config={
-                "temperature": 0.1,
-                "response_mime_type": "application/json",
-                "response_schema": get_regulatory_check_schema()
-            }
+            generation_config={"temperature": 0.1, "max_output_tokens": 200}
         )
         
-        response = await model_with_schema.generate_content_async(prompt)
-        return clean_and_parse_json(response.text, {"status": "Error", "note": f"Ошибка при проверке: парсинг JSON"})
+        response = await model.generate_content_async(prompt)
+        
+        # Try to parse JSON, fallback to safe defaults
+        try:
+            return json.loads(response.text.strip())
+        except json.JSONDecodeError:
+            # Extract status from text if JSON parsing fails
+            text = response.text.lower()
+            if 'approved' in text or 'одобрен' in text:
+                status = "Approved"
+            elif 'not approved' in text or 'не одобрен' in text:
+                status = "Not Approved"
+            else:
+                status = "Unknown"
+            return {"status": status, "note": "Статус определен из текстового ответа"}
         
     except Exception as e:
         print(f"Error checking {regulator} with Gemini: {e}")

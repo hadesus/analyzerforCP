@@ -36,23 +36,20 @@ def get_final_analysis_prompt(full_drug_data: dict) -> str:
     # Convert dict to a pretty JSON string for clear presentation in the prompt
     context_str = json.dumps(full_drug_data, indent=2, ensure_ascii=False)
 
-    return f"""
-    Ты система анализа клинических данных. Проанализируй данные о препарате и предоставь финальную оценку.
+    return f"""Ты система анализа клинических данных. Проанализируй данные о препарате и предоставь финальную оценку.
 
     Данные о препарате:
     {context_str}
 
-    Задачи:
-    1. Присвой GRADE уровень доказательности: "High", "Moderate", "Low", или "Very Low"
-    2. Дай краткое обоснование (1 предложение)
-    3. Напиши краткую заметку на русском языке для клинициста (1-2 предложения)
+    Выполни анализ и предоставь:
+    1. ud_ai_grade: GRADE уровень доказательности ("High", "Moderate", "Low", "Very Low")
+    2. ud_ai_justification: краткое обоснование уровня (1 предложение)
+    3. ai_summary_note: заметка для клинициста на русском языке (1-2 предложения)
 
-    Учитывай:
+    При оценке учитывай:
     - Исходный уровень доказательности из протокола
     - Найденные исследования в PubMed
     - Статус регистрации в регуляторных органах
-    - Соответствие дозировки стандартам
-    """
 
 def clean_and_parse_json(raw_text: str) -> dict:
     """
@@ -86,45 +83,40 @@ def clean_and_parse_json(raw_text: str) -> dict:
         }
 async def generate_ai_analysis(full_drug_data: dict) -> dict:
     """
-    Generates the final AI analysis using Gemini with JSON schema.
+    Generates the final analysis using Gemini LLM.
     """
     prompt = get_final_analysis_prompt(full_drug_data)
 
     try:
-        # Configure model with JSON schema
-        model_with_schema = genai.GenerativeModel(
+        # Use simpler model configuration like demo
+        model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
-            generation_config={
-                "temperature": 0.1,
-                "top_p": 1,
-                "top_k": 1,
-                "max_output_tokens": 2048,
-                "response_mime_type": "application/json",
-                "response_schema": get_analysis_schema()
-            }
+            generation_config={"temperature": 0.2, "max_output_tokens": 1000}
         )
         
-        response = await model_with_schema.generate_content_async(prompt)
-        analysis = clean_and_parse_json(response.text)
+        response = await model.generate_content_async(prompt)
+        
+        # Try JSON parsing first, then fallback to text extraction
+        try:
+            analysis = json.loads(response.text.strip())
+        except json.JSONDecodeError:
+            # Extract from text if JSON fails
+            text = response.text
+            analysis = {
+                "ud_ai_grade": extract_grade_from_text(text),
+                "ud_ai_justification": extract_justification_from_text(text),
+                "ai_summary_note": extract_summary_from_text(text)
+            }
         
         print(f"Generated AI analysis for drug: {full_drug_data.get('source_data', {}).get('drug_name_source', 'Unknown')}")
         return analysis
         
-    except json.JSONDecodeError as e:
-        print(f"JSON parsing error in AI analysis: {e}")
-        print(f"Raw response: {response.text if 'response' in locals() else 'No response'}")
-        return {
-            "ud_ai_grade": "Error",
-            "ud_ai_justification": "Ошибка парсинга ответа ИИ.",
-            "ai_summary_note": "Не удалось сгенерировать анализ из-за ошибки парсинга."
-        }
     except Exception as e:
-        print(f"Error during final AI analysis: {e}")
+        print(f"Error during final analysis: {e}")
         return {
             "ud_ai_grade": "Error",
             "ud_ai_justification": "Ошибка при генерации анализа.",
             "ai_summary_note": "Произошла ошибка при генерации финального анализа."
-        }
 
 # Export the model for use in other modules
 gemini_model = genai.GenerativeModel(

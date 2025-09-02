@@ -55,11 +55,29 @@ async def _normalize_with_rxnav(drug_name: str, client: httpx.AsyncClient) -> st
 
 async def _normalize_with_gemini(drug_name: str) -> str | None:
     """Uses Gemini as a fallback to find the INN for a drug name."""
-    prompt = f"What is the International Nonproprietary Name (INN) for the drug '{drug_name}'? Please return only the INN name and nothing else. For example, if the input is 'Lipitor', the output should be 'Atorvastatin'."
+    prompt = f"""Определи международное непатентованное наименование (МНН) для препарата '{drug_name}'.
+
+Верни ТОЛЬКО название МНН на английском языке, без дополнительных пояснений.
+
+Примеры:
+- Липитор → Atorvastatin
+- Аспирин → Acetylsalicylic acid
+- Парацетамол → Paracetamol
+
+Препарат: {drug_name}
+МНН:"""
+    
     try:
-        response = await gemini_model.generate_content_async(prompt)
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            generation_config={"temperature": 0.1, "max_output_tokens": 100}
+        )
+        response = await model.generate_content_async(prompt)
         # Simple cleaning, assuming the model follows instructions
-        return response.text.strip()
+        result = response.text.strip()
+        # Remove common prefixes that Gemini might add
+        result = result.replace("МНН:", "").replace("INN:", "").strip()
+        return result if result else None
     except Exception as e:
         print(f"An error occurred during Gemini normalization: {e}")
         return None
