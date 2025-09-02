@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-docx
+python-dotenv
+google-generativeai
+requests
+redis
+openpyxl
+lxml
+biopython
