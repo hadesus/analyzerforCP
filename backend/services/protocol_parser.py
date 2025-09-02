@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import traceback
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -199,59 +200,104 @@ def robust_json_parse(raw_text: str) -> dict:
 async def extract_drugs_from_text(text: str) -> list:
     """
     Uses Gemini to extract drug information from clinical protocol text.
-    Optimized for Russian medical documents with robust error handling.
+    Simplified approach based on demo version.
     """
     if not text or not text.strip():
+        print("❌ Empty text provided")
         return []
 
-    # Use a more focused prompt similar to demo
-    prompt = f"""Проанализируй следующий текст клинического протокола и извлеки ВСЕ упоминания лекарственных средств.
+    print(f"📄 Analyzing text of length: {len(text)}")
 
-Для каждого препарата укажи:
-- name: точное название как в тексте
-- innEnglish: МНН на английском (если можешь определить)
-- dosage: дозировка с единицами измерения
-- route: путь введения (кратко)
-- frequency: частота приема
-- duration: продолжительность лечения
+    prompt = f"""Найди все лекарственные препараты в тексте клинического протокола.
 
-ВАЖНО: Ищи ВСЕ препараты, включая:
-- Торговые названия
-- МНН
-- Препараты в составе схем лечения
-- Сопутствующую терапию
-- Профилактические препараты
+Для каждого препарата верни:
+- Название препарата
+- Дозировку (если указана)
+- Путь введения (если указан)
+- Контекст использования
 
-Текст протокола:
+Текст:
 ---
-{text[:50000]}
+{text[:30000]}
 ---
 
-Верни результат в JSON формате."""
+Ответь списком препаратов, каждый с новой строки в формате:
+Препарат: [название] | Дозировка: [доза] | Путь: [введение] | Контекст: [использование]"""
     
     try:
-        # Use simpler model configuration like in demo
+        print("🤖 Sending request to Gemini...")
         model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
             generation_config={
                 "temperature": 0.1,
-                "max_output_tokens": 8192
+                "max_output_tokens": 4000
             }
         )
         
         response = await model.generate_content_async(prompt)
         
         if not response or not response.text:
-            print("Empty response from Gemini")
+            print("❌ Empty response from Gemini")
             return []
         
-        print(f"Gemini response length: {len(response.text)} chars")
+        print(f"✅ Gemini response received: {len(response.text)} chars")
         
-        # Parse the JSON response with robust parsing
-        result_data = robust_json_parse(response.text)
+        # Parse simple text response instead of JSON
+        drugs = parse_text_response(response.text)
+        print(f"✅ Extracted {len(drugs)} drugs")
+        return drugs
         
-        # Extract the drugs array
-        extracted_drugs = result_data.get("drugs", [])
+    except Exception as e:
+        print(f"❌ Error during Gemini extraction: {e}")
+        traceback.print_exc()
+        return []
+
+def parse_text_response(text: str) -> list:
+    """Parse simple text response from Gemini."""
+    drugs = []
+    lines = text.strip().split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line or not 'Препарат:' in line:
+            continue
+            
+        try:
+            # Parse format: Препарат: [название] | Дозировка: [доза] | Путь: [введение] | Контекст: [использование]
+            parts = line.split('|')
+            
+            drug_name = ""
+            dosage = ""
+            route = ""
+            context = ""
+            
+            for part in parts:
+                part = part.strip()
+                if part.startswith('Препарат:'):
+                    drug_name = part.replace('Препарат:', '').strip()
+                elif part.startswith('Дозировка:'):
+                    dosage = part.replace('Дозировка:', '').strip()
+                elif part.startswith('Путь:'):
+                    route = part.replace('Путь:', '').strip()
+                elif part.startswith('Контекст:'):
+                    context = part.replace('Контекст:', '').strip()
+            
+            if drug_name:
+                drug = {
+                    "drug_name_source": drug_name,
+                    "dosage_source": dosage,
+                    "route_source": route,
+                    "context_indication": context
+                }
+                drugs.append(drug)
+                print(f"  📋 Found drug: {drug_name}")
+                
+        except Exception as e:
+            print(f"❌ Error parsing line '{line}': {e}")
+            continue
+    
+    return drugs
+
         
         # Convert to the format expected by the rest of the pipeline
         converted_drugs = []

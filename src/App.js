@@ -1,8 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import './App.css';
-import { supabase, auth, protocolStorage } from './lib/supabase';
-import AuthModal from './components/AuthModal';
-import UserProfile from './components/UserProfile';
+import { localStorage as protocolStorage } from './lib/localStorage';
 import ProtocolHistory from './components/ProtocolHistory';
 import FileUpload from './components/FileUpload';
 import ResultsTable from './components/ResultsTable';
@@ -10,9 +8,41 @@ import ExportButtons from './components/ExportButtons';
 import LoadingIndicator from './components/LoadingIndicator';
 import ErrorMessage from './components/ErrorMessage';
 
+const useSortableData = (items, config = null) => {
+  const [sortConfig, setSortConfig] = useState(config);
+
+  const sortedItems = useMemo(() => {
+    if (!items || !Array.isArray(items)) return [];
+    let sortableItems = [...items];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        const getNestedValue = (obj, path) => path.split('.').reduce((o, k) => (o || {})[k], obj);
+        const aValue = getNestedValue(a, sortConfig.key);
+        const bValue = getNestedValue(b, sortConfig.key);
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [items, sortConfig]);
+
+  const requestSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  return { items: sortedItems || [], requestSort, sortConfig };
+};
+
 function App() {
-  const [user, setUser] = useState(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [analysisData, setAnalysisData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,90 +50,46 @@ function App() {
   const [filterText, setFilterText] = useState('');
   const [currentStage, setCurrentStage] = useState('parsing');
   const [progress, setProgress] = useState(0);
-  const [authLoading, setAuthLoading] = useState(true);
 
-  // Check authentication status on mount
-  React.useEffect(() => {
-    const checkAuth = async () => {
-      const currentUser = await auth.getUser();
-      setUser(currentUser);
-      setAuthLoading(false);
-    };
-    
-    checkAuth();
-    
-    const { data: { subscription } } = auth.onAuthStateChange((event, session) => {
-      setUser(session?.user || null);
+  const analysisResults = analysisData?.analysis_results || [];
+  const documentSummary = analysisData?.document_summary;
+
+  const { items: sortedResults, requestSort, sortConfig } = useSortableData(analysisResults);
+
+  const filteredResults = useMemo(() => {
+    if (!sortedResults || !Array.isArray(sortedResults)) return [];
+    if (!filterText) return sortedResults;
+
+    return sortedResults.filter(item => {
+        const sourceName = item.source_data?.drug_name_source?.toLowerCase() || '';
+        const innName = item.normalization?.inn_name?.toLowerCase() || '';
+        return sourceName.includes(filterText.toLowerCase()) || innName.includes(filterText.toLowerCase());
     });
+  }, [sortedResults, filterText]);
 
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleAnalysisSuccess = async (data) => {
+  const handleAnalysisSuccess = (data) => {
     setAnalysisData(data);
     
-    // Save to database if user is authenticated
-    if (user && data.analysis_results?.length > 0) {
+    // Save to local storage
+    if (data.analysis_results?.length > 0) {
       try {
-        await protocolStorage.saveProtocol(
+        protocolStorage.saveProtocol(
           data.filename,
           data.document_summary,
           data.analysis_results
         );
+        console.log('✅ Protocol saved to local storage');
       } catch (error) {
-        console.error('Error saving protocol:', error);
+        console.error('❌ Error saving protocol:', error);
         // Don't show error to user, just log it
       }
     }
-  };
-
-  const handleSignOut = async () => {
-    await auth.signOut();
-    setUser(null);
-    setAnalysisData(null);
-    setShowHistory(false);
   };
 
   const handleLoadProtocol = (protocolData) => {
     setAnalysisData(protocolData);
     setShowHistory(false);
   };
-
-  const analysisResults = analysisData?.analysis_results || [];
-  const documentSummary = analysisData?.document_summary;
-
-  const sortedResults = useMemo(() => {
-    return [...analysisResults].sort((a, b) => {
-      const scoreA = parseFloat(a.confidence_score) || 0;
-      const scoreB = parseFloat(b.confidence_score) || 0;
-      return scoreB - scoreA;
-    });
-  }, [analysisResults]);
-
-  const filteredResults = useMemo(() => {
-    if (!filterText) return sortedResults;
-    
-    const searchTerm = filterText.toLowerCase();
-    return sortedResults.filter(result => {
-      return (
-        result.finding?.toLowerCase().includes(searchTerm) ||
-        result.category?.toLowerCase().includes(searchTerm) ||
-        result.severity?.toLowerCase().includes(searchTerm) ||
-        result.recommendation?.toLowerCase().includes(searchTerm)
-      );
-    });
-  }, [sortedResults, filterText]);
-
-  if (authLoading) {
-    return (
-      <div className="App">
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <div className="loading-text">Загрузка...</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="App">
@@ -112,50 +98,39 @@ function App() {
       <div className="medical-decoration microscope">🔬</div>
       
       <header className="App-header">
-        <div className="header-top">
-          {user ? (
-            <UserProfile user={user} onSignOut={handleSignOut} />
-          ) : (
-            <button 
-              className="auth-btn"
-              onClick={() => setAuthModalOpen(true)}
-            >
-              👤 Войти
-            </button>
-          )}
-        </div>
-        
         <h1>Анализатор Клинических Протоколов</h1>
         <p className="subtitle">Профессиональный анализ медицинских документов с использованием NLP и LLM</p>
         <div className="features">
-          <div className="feature">
-            <span>🤖</span>
-            <span>ИИ Анализ</span>
+          <div className="feature-badge">
+            <span>🔬</span>
+            <span>NLP Анализ</span>
           </div>
-          <div className="feature">
+          <div className="feature-badge">
+            <span>🏥</span>
+            <span>Регуляторные Проверки</span>
+          </div>
+          <div className="feature-badge">
             <span>📊</span>
-            <span>Детальная Статистика</span>
+            <span>GRADE Оценка</span>
           </div>
-          <div className="feature">
+          <div className="feature-badge">
             <span>📚</span>
             <span>PubMed Интеграция</span>
           </div>
         </div>
         
-        {user && (
-          <div className="header-actions">
-            <button 
-              className="history-btn"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              📚 {showHistory ? 'Скрыть историю' : 'История анализов'}
-            </button>
-          </div>
-        )}
+        <div className="header-actions">
+          <button 
+            className="history-btn"
+            onClick={() => setShowHistory(!showHistory)}
+          >
+            📚 {showHistory ? 'Скрыть историю' : 'История анализов'}
+          </button>
+        </div>
       </header>
       
       <main>
-        {user && showHistory && (
+        {showHistory && (
           <ProtocolHistory onLoadProtocol={handleLoadProtocol} />
         )}
         
@@ -168,87 +143,42 @@ function App() {
             setProgress={setProgress}
           />
         </div>
+        
+        {isLoading && <LoadingIndicator currentStage={currentStage} progress={progress} />}
+        {errorMessage && <ErrorMessage message={errorMessage} />}
 
-        {isLoading && (
-          <LoadingIndicator 
-            stage={currentStage} 
-            progress={progress}
-          />
-        )}
-
-        {errorMessage && (
-          <ErrorMessage 
-            message={errorMessage} 
-            onClose={() => setErrorMessage('')} 
-          />
-        )}
-
-        {analysisData && !isLoading && (
-          <div className="results-section">
-            <div className="glass-card">
-              <h2>📋 Сводка документа</h2>
-              {documentSummary && (
-                <div className="document-summary">
-                  <div className="summary-grid">
-                    <div className="summary-item">
-                      <strong>📄 Тип документа:</strong>
-                      <span>{documentSummary.document_type || 'Не определен'}</span>
-                    </div>
-                    <div className="summary-item">
-                      <strong>👤 Пациент:</strong>
-                      <span>{documentSummary.patient_info || 'Информация недоступна'}</span>
-                    </div>
-                    <div className="summary-item">
-                      <strong>📅 Дата:</strong>
-                      <span>{documentSummary.date || 'Не указана'}</span>
-                    </div>
-                    <div className="summary-item">
-                      <strong>🏥 Учреждение:</strong>
-                      <span>{documentSummary.institution || 'Не указано'}</span>
-                    </div>
-                  </div>
-                  
-                  {documentSummary.key_findings && (
-                    <div className="key-findings">
-                      <h3>🔍 Ключевые находки:</h3>
-                      <p>{documentSummary.key_findings}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="glass-card">
-              <div className="results-header">
-                <h2>📊 Результаты анализа ({filteredResults.length})</h2>
-                <div className="filter-controls">
-                  <input
-                    type="text"
-                    placeholder="🔍 Поиск по результатам..."
-                    value={filterText}
-                    onChange={(e) => setFilterText(e.target.value)}
-                    className="filter-input"
-                  />
-                </div>
+        {analysisData && (
+          <div className="results-container fade-in-up">
+            {documentSummary && (
+              <div className="summary-container">
+                <h3>Общее резюме документа</h3>
+                <p>{documentSummary}</p>
               </div>
-              
-              <ResultsTable results={filteredResults} />
-              
-              <ExportButtons 
+            )}
+            
+            <div className="filter-container">
+              <div className="filter-icon">🔍</div>
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Поиск по названию препарата или МНН..."
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+              />
+            </div>
+            
+            <ExportButtons results={filteredResults} />
+            
+            <div className="table-container">
+              <ResultsTable
                 results={filteredResults}
-                documentSummary={documentSummary}
-                filename={analysisData.filename}
+                requestSort={requestSort}
+                sortConfig={sortConfig}
               />
             </div>
           </div>
         )}
       </main>
-      
-      <AuthModal 
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        onAuthSuccess={() => setAuthModalOpen(false)}
-      />
     </div>
   );
 }
