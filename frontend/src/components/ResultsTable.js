@@ -26,13 +26,6 @@ const ResultsTable = ({ results, requestSort, sortConfig }) => {
     return sortConfig.direction === 'ascending' ? ' ▲' : ' ▼';
   };
 
-  const renderDetailValue = (value) => {
-    if (typeof value === 'object' && value !== null) {
-      return <pre>{JSON.stringify(value, null, 2)}</pre>;
-    }
-    return value;
-  };
-
   const renderDetails = (item) => (
     <div className="details-content">
       <div className="details-grid">
