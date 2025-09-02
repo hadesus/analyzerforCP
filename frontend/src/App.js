@@ -10,7 +10,7 @@ const useSortableData = (items, config = null) => {
   const [sortConfig, setSortConfig] = useState(config);
 
   const sortedItems = useMemo(() => {
-    if (!items) return null;
+    if (!items || !Array.isArray(items)) return [];
     let sortableItems = [...items];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
@@ -37,7 +37,7 @@ const useSortableData = (items, config = null) => {
     setSortConfig({ key, direction });
   };
 
-  return { items: sortedItems, requestSort, sortConfig };
+  return { items: sortedItems || [], requestSort, sortConfig };
 };
 
 function App() {
@@ -46,13 +46,13 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [filterText, setFilterText] = useState('');
 
-  const analysisResults = analysisData?.analysis_results;
+  const analysisResults = analysisData?.analysis_results || [];
   const documentSummary = analysisData?.document_summary;
 
   const { items: sortedResults, requestSort, sortConfig } = useSortableData(analysisResults);
 
   const filteredResults = useMemo(() => {
-    if (!sortedResults) return null;
+    if (!sortedResults || !Array.isArray(sortedResults)) return [];
     if (!filterText) return sortedResults;
 
     return sortedResults.filter(item => {
