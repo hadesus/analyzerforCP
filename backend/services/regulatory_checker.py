@@ -53,7 +53,22 @@ async def _check_with_gemini(inn_name: str, regulator: str) -> dict:
     prompt = f"Is the drug with International Nonproprietary Name '{inn_name}' approved by the '{regulator}'? Provide a one-word status: 'Approved', 'Not Approved', or 'Unknown'. Also, provide a very brief, one-sentence note in Russian. Return as a JSON object with keys 'status' and 'note'."
     try:
         response = await gemini_model.generate_content_async(prompt)
-        json_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        # Clean the response more thoroughly
+        json_response_text = response.text.strip()
+        json_response_text = json_response_text.replace("```json", "").replace("```", "")
+        json_response_text = json_response_text.strip()
+        
+        # Find the first '{' and last '}' to extract just the JSON object
+        start_idx = json_response_text.find('{')
+        end_idx = json_response_text.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            json_response_text = json_response_text[start_idx:end_idx + 1]
+        
+        # Remove newlines that might break JSON parsing
+        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
+        
         return json.loads(json_response_text)
     except Exception as e:
         print(f"Error checking {regulator} with Gemini: {e}")
@@ -80,7 +95,22 @@ async def _compare_dosages_with_gemini(source_dosage: str, standard_dosage_text:
     """
     try:
         response = await gemini_model.generate_content_async(prompt)
-        json_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        # Clean the response more thoroughly
+        json_response_text = response.text.strip()
+        json_response_text = json_response_text.replace("```json", "").replace("```", "")
+        json_response_text = json_response_text.strip()
+        
+        # Find the first '{' and last '}' to extract just the JSON object
+        start_idx = json_response_text.find('{')
+        end_idx = json_response_text.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            json_response_text = json_response_text[start_idx:end_idx + 1]
+        
+        # Remove newlines that might break JSON parsing
+        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
+        
         return json.loads(json_response_text)
     except Exception as e:
         print(f"Error comparing dosages with Gemini: {e}")

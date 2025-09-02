@@ -53,11 +53,29 @@ async def generate_ai_analysis(full_drug_data: dict) -> dict:
 
     try:
         response = await gemini_model.generate_content_async(prompt)
-        json_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        # Clean the response more thoroughly
+        json_response_text = response.text.strip()
+        json_response_text = json_response_text.replace("```json", "").replace("```", "")
+        json_response_text = json_response_text.strip()
+        
+        # Find the first '{' and last '}' to extract just the JSON object
+        start_idx = json_response_text.find('{')
+        end_idx = json_response_text.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            json_response_text = json_response_text[start_idx:end_idx + 1]
+        
+        # Remove newlines that might break JSON parsing
+        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
+        
+        print(f"Cleaned AI analysis JSON: {json_response_text[:200]}...")  # Debug log
+        
         analysis = json.loads(json_response_text)
         return analysis
     except Exception as e:
         print(f"Error during final AI analysis: {e}")
+        print(f"Raw response text: {response.text if 'response' in locals() else 'No response'}")
         return {
             "ud_ai_grade": "Error",
             "ud_ai_justification": "Failed to generate AI analysis.",

@@ -60,14 +60,39 @@ async def extract_drugs_from_text(text: str) -> list:
     try:
         response = await model.generate_content_async(prompt)
 
-        # Clean the response to get only the JSON part
-        json_response_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        # Clean the response more thoroughly to get only the JSON part
+        json_response_text = response.text.strip()
+        
+        # Remove markdown code blocks
+        json_response_text = json_response_text.replace("```json", "").replace("```", "")
+        
+        # Remove any leading/trailing whitespace and newlines
+        json_response_text = json_response_text.strip()
+        
+        # Find the first '[' and last ']' to extract just the JSON array
+        start_idx = json_response_text.find('[')
+        end_idx = json_response_text.rfind(']')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            json_response_text = json_response_text[start_idx:end_idx + 1]
+        
+        # Additional cleanup for common issues
+        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
+        
+        print(f"Cleaned JSON response: {json_response_text[:200]}...")  # Debug log
 
         # Parse the JSON string into a Python list of dictionaries
         extracted_data = json.loads(json_response_text)
+        
+        # Validate that we got a list
+        if not isinstance(extracted_data, list):
+            print(f"Expected list but got {type(extracted_data)}")
+            return []
+            
         return extracted_data
     except Exception as e:
         # Handle potential errors, e.g., JSON parsing errors or API errors
         print(f"Error during Gemini extraction: {e}")
+        print(f"Raw response text: {response.text if 'response' in locals() else 'No response'}")
         # In a real app, you'd want more robust error handling/logging
         return {"error": "Failed to extract data using AI", "details": str(e)}
