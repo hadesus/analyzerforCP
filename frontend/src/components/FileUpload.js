@@ -28,17 +28,14 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage, setCurrent
       setTimeout(() => setCurrentStage('extraction'), 1000);
       setTimeout(() => setProgress(20), 1500);
       
-      setTimeout(() => setCurrentStage('normalization'), 3000);
-      setTimeout(() => setProgress(35), 3500);
+      setTimeout(() => setCurrentStage('regulatory'), 3000);
+      setTimeout(() => setProgress(40), 3500);
       
-      setTimeout(() => setCurrentStage('regulatory'), 5000);
-      setTimeout(() => setProgress(50), 5500);
+      setTimeout(() => setCurrentStage('pubmed'), 5000);
+      setTimeout(() => setProgress(65), 5500);
       
-      setTimeout(() => setCurrentStage('pubmed'), 7000);
-      setTimeout(() => setProgress(65), 7500);
-      
-      setTimeout(() => setCurrentStage('analysis'), 9000);
-      setTimeout(() => setProgress(80), 9500);
+      setTimeout(() => setCurrentStage('analysis'), 7000);
+      setTimeout(() => setProgress(80), 7500);
 
       const response = await axios.post('http://localhost:8000/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -131,16 +128,16 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage, setCurrent
       <p className="upload-hint">Поддерживаются только файлы формата .docx</p>
       <div className="upload-features">
         <div className="upload-feature">
-          <span className="medical-icon">🔍</span>
-          <span>NLP извлечение препаратов</span>
+          <span className="medical-icon">🤖</span>
+          <span>Единый AI анализ препаратов</span>
         </div>
         <div className="upload-feature">
           <span className="medical-icon">🏛️</span>
           <span>Проверка регуляторных статусов</span>
         </div>
         <div className="upload-feature">
-          <span className="medical-icon">📈</span>
-          <span>LLM анализ доказательности</span>
+          <span className="medical-icon">📚</span>
+          <span>Поиск исследований PubMed</span>
         </div>
       </div>
     </div>

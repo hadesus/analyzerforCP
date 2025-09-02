@@ -3,11 +3,10 @@ import React from 'react';
 const LoadingIndicator = ({ currentStage = 'parsing', progress = 0 }) => {
   const stages = [
     { key: 'parsing', label: 'Парсинг документа', icon: '📄', description: 'Извлекаем текст из .docx файла' },
-    { key: 'extraction', label: 'Извлечение препаратов', icon: '🔬', description: 'Единый AI анализ для извлечения всех препаратов с МНН' },
-    { key: 'normalization', label: 'Проверка МНН', icon: '🏷️', description: 'Валидация и уточнение МНН через RxNav' },
+    { key: 'extraction', label: 'Единый AI анализ', icon: '🤖', description: 'Извлекаем ВСЕ препараты с МНН, дозировками и GRADE оценкой' },
     { key: 'regulatory', label: 'Регуляторные проверки', icon: '🏛️', description: 'Проверяем статусы в FDA, EMA, BNF, WHO' },
     { key: 'pubmed', label: 'Поиск исследований', icon: '📚', description: 'Ищем релевантные исследования в PubMed с учетом контекста' },
-    { key: 'analysis', label: 'LLM анализ', icon: '📊', description: 'Генерируем GRADE оценку и заключение' }
+    { key: 'analysis', label: 'Финализация', icon: '📊', description: 'Объединяем все данные в итоговый отчет' }
   ];
 
   const currentStageIndex = stages.findIndex(stage => stage.key === currentStage);

@@ -102,8 +102,8 @@ function App() {
         <p className="subtitle">Профессиональный анализ медицинских документов с использованием NLP и LLM</p>
         <div className="features">
           <div className="feature-badge">
-            <span>🔬</span>
-            <span>NLP Анализ</span>
+            <span>🤖</span>
+            <span>Единый AI Анализ</span>
           </div>
           <div className="feature-badge">
             <span>🏥</span>

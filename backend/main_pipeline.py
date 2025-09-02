@@ -13,10 +13,6 @@ try:
     from services import protocol_parser
     logger.info("✅ protocol_parser imported")
     
-    logger.info("Importing drug_normalizer...")
-    from services import drug_normalizer
-    logger.info("✅ drug_normalizer imported")
-    
     logger.info("Importing regulatory_checker...")
     from services import regulatory_checker
     logger.info("✅ regulatory_checker imported")
@@ -24,10 +20,6 @@ try:
     logger.info("Importing pubmed_client...")
     from services import pubmed_client
     logger.info("✅ pubmed_client imported")
-    
-    logger.info("Importing ai_analyzer...")
-    from services import ai_analyzer
-    logger.info("✅ ai_analyzer imported")
     
 except ImportError as e:
     logger.error(f"❌ Import error: {e}")
@@ -40,88 +32,35 @@ logger.info("Creating PubMed client...")
 pubmed = pubmed_client.PubMedClient()
 logger.info("✅ PubMed client created")
 
-async def generate_document_summary(full_text: str) -> str:
-    """Uses Gemini to generate a brief summary of the entire document."""
-    logger.info("📝 Starting document summary generation...")
-    if not full_text:
-        logger.warning("❌ Empty text for summary generation")
-        return "Текст документа пуст."
-
-    logger.info(f"📝 Generating summary for text of length: {len(full_text)}")
-    
-    prompt = f"""Проанализируй клинический протокол и напиши краткое резюме (2-3 предложения).
-
-Укажи:
-- Основное заболевание или состояние
-- Целевую группу пациентов
-- Основные подходы к лечению
-
-Текст протокола:
----
-{full_text[:15000]}
----
-
-Резюме:"""
-    
-    try:
-        logger.info("🤖 Sending summary request to Gemini...")
-        import google.generativeai as genai
-        model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            generation_config={"temperature": 0.2, "max_output_tokens": 500}
-        )
-        response = await model.generate_content_async(prompt)
-        summary = response.text.strip()
-        logger.info(f"✅ Summary generated: {len(summary)} chars")
-        return summary
-    except Exception as e:
-        logger.error(f"❌ Error generating document summary: {e}")
-        return "Не удалось сгенерировать резюме документа."
-
 async def process_single_drug(drug_info: dict, document_context: str = ""):
     """
-    Processes a single drug through the complete analysis pipeline.
-    Enhanced to use existing INN from extraction and better context.
+    Processes a single drug using the demo approach - most data already extracted.
     """
     source_name = drug_info.get("drug_name_source")
-    existing_inn = drug_info.get("inn_name", "")
+    inn_name = drug_info.get("inn_name", "")
     
     if not source_name:
         logger.warning(f"❌ Skipping drug with no source name: {drug_info}")
         return None
 
-    logger.info(f"💊 Processing drug: {source_name}")
+    logger.info(f"💊 Processing drug: {source_name} (INN: {inn_name})")
     
-    try:
-        logger.info(f"🔄 Normalizing drug name: {source_name}")
-        # Use existing INN if provided by extraction
-        if existing_inn and existing_inn.lower() not in ['unknown', 'не определен']:
-            normalization_result = await drug_normalizer.normalize_drug_with_existing_inn(source_name, existing_inn)
-        else:
-            normalization_result = await drug_normalizer.normalize_drug(source_name)
-        
-        inn_name = normalization_result.get("inn_name")
-        logger.info(f"✅ Normalization result: {normalization_result}")
-    except Exception as e:
-        logger.error(f"❌ Normalization failed for {source_name}: {e}")
-        normalization_result = {"inn_name": None, "source": "Error", "confidence": "none"}
-        inn_name = None
-
-    if not inn_name:
-        logger.warning(f"⚠️ No INN found for {source_name}, returning partial data")
+    # If no INN found by Gemini, skip detailed analysis
+    if not inn_name or inn_name.lower() in ['unknown', 'не определен', '']:
+        logger.warning(f"⚠️ No INN found for {source_name}, returning basic data")
         return {
             "source_data": drug_info,
-            "normalization": normalization_result,
+            "normalization": {"inn_name": None, "source": "Gemini", "confidence": "none"},
             "regulatory_checks": {"regulatory_checks": {}, "dosage_check": {}},
             "pubmed_articles": [],
             "ai_analysis": {
-                "ud_ai_grade": "Unknown",
+                "ud_ai_grade": drug_info.get("ud_ai_grade", "Unknown"),
                 "ud_ai_justification": "Не удалось определить МНН препарата",
-                "ai_summary_note": "Требуется ручная проверка названия препарата"
+                "ai_summary_note": drug_info.get("ai_note", "Требуется ручная проверка названия препарата")
             }
         }
 
-    logger.info(f"✅ Found INN: {inn_name}, proceeding with full analysis")
+    logger.info(f"✅ Found INN: {inn_name}, proceeding with regulatory and PubMed checks")
     
     try:
         logger.info(f"🔍 Starting regulatory and PubMed checks for {inn_name}")
@@ -138,10 +77,10 @@ async def process_single_drug(drug_info: dict, document_context: str = ""):
             source_dosage=drug_info.get("dosage_source", "")
         )
         
-        pubmed_task = pubmed.search_articles(
+        pubmed_task = pubmed.search_articles_for_drug(
             inn_name=inn_name,
             brand_name=source_name,
-            disease_context=search_context
+            context=search_context
         )
 
         logger.info("🔄 Running regulatory and PubMed tasks in parallel...")
@@ -166,36 +105,27 @@ async def process_single_drug(drug_info: dict, document_context: str = ""):
         regulatory_results = {"regulatory_checks": {}, "dosage_check": {}}
         pubmed_articles = []
 
-    # Build full drug data
+    # Build full drug data using demo extracted data + our enhancements
     full_drug_data = {
         "source_data": drug_info,
-        "normalization": normalization_result,
+        "normalization": {"inn_name": inn_name, "source": "Gemini", "confidence": "high"},
         "regulatory_checks": regulatory_results,
         "pubmed_articles": pubmed_articles,
-    }
-
-    try:
-        logger.info(f"🧠 Generating final analysis for {source_name}")
-        final_analysis = await ai_analyzer.generate_ai_analysis(full_drug_data)
-        logger.info(f"✅ Analysis completed for {source_name}")
-    except Exception as e:
-        logger.error(f"❌ Analysis failed for {source_name}: {e}")
-        final_analysis = {
-            "ud_ai_grade": "Error",
-            "ud_ai_justification": "Ошибка при генерации анализа",
-            "ai_summary_note": "Не удалось сгенерировать анализ"
+        "ai_analysis": {
+            "ud_ai_grade": drug_info.get("ud_ai_grade", "Unknown"),
+            "ud_ai_justification": drug_info.get("formulary_status", "Анализ не выполнен"),
+            "ai_summary_note": drug_info.get("ai_note", "Заметка не сгенерирована")
         }
-        
-    full_drug_data["ai_analysis"] = final_analysis
+    }
     
-    logger.info(f"✅ Completed full analysis for: {source_name}")
+    logger.info(f"✅ Completed analysis for: {source_name}")
     return full_drug_data
 
 async def run_analysis_pipeline(file_content: bytes):
     """
-    Enhanced main orchestrator using unified extraction approach like demo.
+    Main orchestrator using demo approach - unified extraction with enhancements.
     """
-    logger.info("🚀 Starting enhanced analysis pipeline")
+    logger.info("🚀 Starting DEMO-STYLE analysis pipeline")
     logger.info(f"File content size: {len(file_content)} bytes")
     
     file_stream = io.BytesIO(file_content)
@@ -231,9 +161,9 @@ async def run_analysis_pipeline(file_content: bytes):
         return {"error": "Документ пуст или не содержит текста."}
 
     try:
-        # Generate summary and extract drugs concurrently
-        logger.info("🔄 Starting summary and unified drug extraction")
-        summary_task = generate_document_summary(full_text)
+        # Generate summary and extract drugs concurrently (like demo but with summary)
+        logger.info("🔄 Starting summary and UNIFIED drug extraction (demo approach)")
+        summary_task = protocol_parser.generate_document_summary(full_text)
         extraction_task = protocol_parser.extract_drugs_from_text(full_text)
 
         logger.info("⏳ Waiting for summary and extraction tasks...")
@@ -266,25 +196,25 @@ async def run_analysis_pipeline(file_content: bytes):
             "message": "В документе не найдено лекарственных препаратов."
         }
 
-    logger.info(f"🔄 Processing {len(extracted_drugs)} extracted drugs")
+    logger.info(f"🔄 Processing {len(extracted_drugs)} extracted drugs (demo style)")
     for i, drug in enumerate(extracted_drugs):
         logger.info(f"  Drug {i+1}: {drug.get('drug_name_source', 'Unknown')} (INN: {drug.get('inn_name', 'Unknown')})")
 
     try:
-        logger.info("🔄 Starting parallel drug analysis...")
+        logger.info("🔄 Starting parallel drug enhancement (regulatory + PubMed)...")
         # Pass document context to each drug processing
         analysis_tasks = [process_single_drug(drug, full_text[:1000]) for drug in extracted_drugs]
         analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
-        logger.info("✅ All drug analysis tasks completed")
+        logger.info("✅ All drug enhancement tasks completed")
         
         # Filter out exceptions and None results
         valid_results = []
         for i, result in enumerate(analysis_results):
             if isinstance(result, Exception):
-                logger.error(f"❌ Analysis failed for drug {i}: {result}")
+                logger.error(f"❌ Enhancement failed for drug {i}: {result}")
             elif result is not None:
                 valid_results.append(result)
-                logger.info(f"✅ Drug {i+1} analysis successful")
+                logger.info(f"✅ Drug {i+1} enhancement successful")
         
         logger.info(f"✅ Pipeline completed. {len(valid_results)} drugs analyzed successfully")
         
@@ -294,6 +224,6 @@ async def run_analysis_pipeline(file_content: bytes):
         }
         
     except Exception as e:
-        logger.error(f"❌ Error in drug analysis: {e}")
+        logger.error(f"❌ Error in drug enhancement: {e}")
         logger.error(traceback.format_exc())
         return {"error": f"Ошибка при анализе препаратов: {e}"}
