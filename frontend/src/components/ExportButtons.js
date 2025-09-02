@@ -4,7 +4,7 @@ import axios from 'axios';
 const ExportButtons = ({ results }) => {
   const handleExport = async (format) => {
     try {
-      const response = await axios.post(`/export/${format}`, results, {
+      const response = await axios.post(`http://localhost:8000/export/${format}`, results, {
         responseType: 'blob', // Important for file downloads
       });
 

@@ -15,7 +15,7 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('/analyze', formData, {
+      const response = await axios.post('http://localhost:8000/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 300000, // 5 minutes
       });
