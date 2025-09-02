@@ -11,87 +11,91 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Export the model for use in other modules
-gemini_model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash",
-    generation_config={
-        "temperature": 0.1,
-        "top_p": 1,
-        "top_k": 1,
-        "max_output_tokens": 8192,
-    }
-)
-
-def get_analysis_schema():
-    """Returns the JSON schema for AI analysis."""
-    return {
-        "type": "object",
-        "properties": {
-            "ud_ai_grade": {
-                "type": "string",
-                "description": "GRADE уровень доказательности"
-            },
-            "ud_ai_justification": {
-                "type": "string", 
-                "description": "Краткое обоснование присвоенного уровня"
-            },
-            "ai_summary_note": {
-                "type": "string",
-                "description": "Краткая заметка на русском языке для клинициста"
-            }
-        },
-        "required": ["ud_ai_grade", "ud_ai_justification", "ai_summary_note"]
-    }
-
-def get_final_analysis_prompt(full_drug_data: dict) -> str:
-    # Convert dict to a pretty JSON string for clear presentation in the prompt
-    context_str = json.dumps(full_drug_data, indent=2, ensure_ascii=False)
-
-    return f"""Ты система анализа клинических данных. Проанализируй данные о препарате и предоставь финальную оценку.
-
-Данные о препарате:
-{context_str}
-
-Выполни анализ и предоставь:
-1. ud_ai_grade: GRADE уровень доказательности ("High", "Moderate", "Low", "Very Low")
-2. ud_ai_justification: краткое обоснование уровня (1 предложение)
-3. ai_summary_note: заметка для клинициста на русском языке (1-2 предложения)
-
-При оценке учитывай:
-- Исходный уровень доказательности из протокола
-- Найденные исследования в PubMed
-- Статус регистрации в регуляторных органах
-- Соответствие дозировки стандартам"""
-
-def clean_and_parse_json(raw_text: str) -> dict:
+async def generate_ai_analysis(full_drug_data: dict) -> dict:
     """
-    Attempts to clean and parse potentially malformed JSON from Gemini.
+    Generates the final analysis using Gemini LLM - same approach as demo.
     """
+    drug_name = full_drug_data.get('source_data', {}).get('drug_name_source', 'Unknown')
+    inn_name = full_drug_data.get('normalization', {}).get('inn_name', 'Unknown')
+    
+    # Build context summary
+    regulatory_checks = full_drug_data.get('regulatory_checks', {}).get('regulatory_checks', {})
+    pubmed_count = len(full_drug_data.get('pubmed_articles', []))
+    dosage_check = full_drug_data.get('regulatory_checks', {}).get('dosage_check', {})
+    
+    # Count approvals
+    approved_count = sum(1 for check in regulatory_checks.values() 
+                        if isinstance(check, dict) and 
+                        check.get('status') in ['Approved', 'Found'])
+    
+    prompt = f"""Проанализируй данные о препарате и дай GRADE оценку доказательности.
+
+Препарат: {drug_name} (МНН: {inn_name})
+
+Данные:
+- Регуляторные статусы: {approved_count}/4 одобрений
+- PubMed исследования: {pubmed_count} найдено
+- Дозировка: {dosage_check.get('comparison_result', 'не проверена')}
+
+Детали регуляторов:
+- FDA: {regulatory_checks.get('FDA', {}).get('status', 'не проверен')}
+- EMA: {regulatory_checks.get('EMA', {}).get('status', 'не проверен')}
+- BNF: {regulatory_checks.get('BNF', {}).get('status', 'не проверен')}
+- WHO EML: {regulatory_checks.get('WHO_EML', {}).get('status', 'не проверен')}
+
+Дай оценку в формате JSON:
+{{
+  "ud_ai_grade": "High/Moderate/Low/Very Low",
+  "ud_ai_justification": "краткое обоснование уровня",
+  "ai_summary_note": "заметка для клинициста на русском языке"
+}}
+
+Критерии GRADE:
+- High: множественные РКИ, одобрен регуляторами
+- Moderate: некоторые РКИ, частичные одобрения
+- Low: ограниченные данные
+- Very Low: минимальные данные или противоречия"""
+    
     try:
-        return json.loads(raw_text)
-    except json.JSONDecodeError as e:
-        print(f"Initial JSON parse failed: {e}")
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            generation_config={
+                "temperature": 0.2, 
+                "max_output_tokens": 1000,
+                "response_mime_type": "application/json"
+            }
+        )
         
-        # Clean common issues
-        cleaned_text = raw_text.strip()
-        cleaned_text = re.sub(r'```json\s*', '', cleaned_text)
-        cleaned_text = re.sub(r'```\s*$', '', cleaned_text)
+        response = await model.generate_content_async(prompt)
         
         try:
-            # Find the last complete closing brace
-            last_brace = cleaned_text.rfind('}')
-            if last_brace != -1:
-                truncated_text = cleaned_text[:last_brace + 1]
-                return json.loads(truncated_text)
+            analysis = json.loads(response.text.strip())
+            
+            # Validate required fields
+            required_fields = ["ud_ai_grade", "ud_ai_justification", "ai_summary_note"]
+            for field in required_fields:
+                if field not in analysis:
+                    analysis[field] = "Не определено"
+            
+            print(f"✅ Generated analysis for {drug_name}: {analysis['ud_ai_grade']}")
+            return analysis
+            
         except json.JSONDecodeError:
-            pass
+            # Fallback parsing from text
+            text = response.text
+            analysis = {
+                "ud_ai_grade": extract_grade_from_text(text),
+                "ud_ai_justification": extract_justification_from_text(text),
+                "ai_summary_note": extract_summary_from_text(text)
+            }
+            return analysis
         
-        # Fallback to default structure
-        print(f"Could not parse JSON, returning default structure. Raw text: {raw_text[:500]}...")
+    except Exception as e:
+        print(f"❌ Error during analysis for {drug_name}: {e}")
         return {
             "ud_ai_grade": "Error",
-            "ud_ai_justification": "Ошибка парсинга ответа системы анализа.",
-            "ai_summary_note": "Не удалось сгенерировать анализ из-за ошибки парсинга."
+            "ud_ai_justification": "Ошибка при генерации анализа",
+            "ai_summary_note": "Не удалось сгенерировать анализ"
         }
 
 def extract_grade_from_text(text: str) -> str:
@@ -113,7 +117,7 @@ def extract_justification_from_text(text: str) -> str:
     for line in lines:
         if 'обоснование' in line.lower() or 'justification' in line.lower():
             return line.split(':', 1)[-1].strip()
-    # Return first meaningful sentence as fallback
+    
     sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 20]
     return sentences[0] if sentences else "Обоснование не найдено"
 
@@ -123,44 +127,6 @@ def extract_summary_from_text(text: str) -> str:
     for line in lines:
         if 'заметка' in line.lower() or 'summary' in line.lower():
             return line.split(':', 1)[-1].strip()
-    # Return last meaningful sentences as fallback
+    
     sentences = [s.strip() for s in text.split('.') if len(s.strip()) > 15]
     return '. '.join(sentences[-2:]) if len(sentences) >= 2 else (sentences[-1] if sentences else "Заметка не сгенерирована")
-
-async def generate_ai_analysis(full_drug_data: dict) -> dict:
-    """
-    Generates the final analysis using Gemini LLM.
-    """
-    prompt = get_final_analysis_prompt(full_drug_data)
-
-    try:
-        # Use simpler model configuration like demo
-        model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            generation_config={"temperature": 0.2, "max_output_tokens": 1000}
-        )
-        
-        response = await model.generate_content_async(prompt)
-        
-        # Try JSON parsing first, then fallback to text extraction
-        try:
-            analysis = json.loads(response.text.strip())
-        except json.JSONDecodeError:
-            # Extract from text if JSON fails
-            text = response.text
-            analysis = {
-                "ud_ai_grade": extract_grade_from_text(text),
-                "ud_ai_justification": extract_justification_from_text(text),
-                "ai_summary_note": extract_summary_from_text(text)
-            }
-        
-        print(f"Generated analysis for drug: {full_drug_data.get('source_data', {}).get('drug_name_source', 'Unknown')}")
-        return analysis
-        
-    except Exception as e:
-        print(f"Error during final analysis: {e}")
-        return {
-            "ud_ai_grade": "Error",
-            "ud_ai_justification": "Ошибка при генерации анализа.",
-            "ai_summary_note": "Произошла ошибка при генерации финального анализа."
-        }

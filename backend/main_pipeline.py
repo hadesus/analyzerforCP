@@ -34,7 +34,7 @@ except ImportError as e:
     logger.error(traceback.format_exc())
     raise
 
-# Instantiate clients/services that need it
+# Instantiate clients/services
 logger.info("Creating PubMed client...")
 pubmed = pubmed_client.PubMedClient()
 logger.info("✅ PubMed client created")
@@ -48,14 +48,20 @@ async def generate_document_summary(full_text: str) -> str:
 
     logger.info(f"📝 Generating summary for text of length: {len(full_text)}")
     
-    prompt = f"""Напиши краткое резюме клинического протокола (2-3 предложения).
-    Укажи основное заболевание, целевую группу пациентов и подходы к лечению.
+    prompt = f"""Проанализируй клинический протокол и напиши краткое резюме (2-3 предложения).
 
-    Текст:
-    ---
-    {full_text[:10000]}
-    ---
-    """
+Укажи:
+- Основное заболевание или состояние
+- Целевую группу пациентов
+- Основные подходы к лечению
+
+Текст протокола:
+---
+{full_text[:15000]}
+---
+
+Резюме:"""
+    
     try:
         logger.info("🤖 Sending summary request to Gemini...")
         import google.generativeai as genai
@@ -69,15 +75,12 @@ async def generate_document_summary(full_text: str) -> str:
         return summary
     except Exception as e:
         logger.error(f"❌ Error generating document summary: {e}")
-        logger.error(traceback.format_exc())
-        traceback.print_exc()
-        return "Не удалось сгенерировать общее резюме для документа."
-
+        return "Не удалось сгенерировать резюме документа."
 
 async def process_single_drug(drug_info: dict):
     """
     Processes a single drug through the complete analysis pipeline.
-    Returns comprehensive data including normalization, regulatory checks, and literature.
+    Same logic as demo version.
     """
     source_name = drug_info.get("drug_name_source")
     if not source_name:
@@ -93,7 +96,6 @@ async def process_single_drug(drug_info: dict):
         logger.info(f"✅ Normalization result: {normalization_result}")
     except Exception as e:
         logger.error(f"❌ Normalization failed for {source_name}: {e}")
-        logger.error(traceback.format_exc())
         normalization_result = {"inn_name": None, "source": "Error", "confidence": "none"}
         inn_name = None
 
@@ -115,10 +117,13 @@ async def process_single_drug(drug_info: dict):
     
     try:
         logger.info(f"🔍 Starting regulatory and PubMed checks for {inn_name}")
+        
+        # Run regulatory and PubMed checks in parallel
         regulatory_task = regulatory_checker.check_all_regulators(
             inn_name=inn_name,
             source_dosage=drug_info.get("dosage_source", "")
         )
+        
         pubmed_task = pubmed.search_articles(
             inn_name=inn_name,
             brand_name=source_name,
@@ -144,11 +149,10 @@ async def process_single_drug(drug_info: dict):
             
     except Exception as e:
         logger.error(f"❌ Error in parallel tasks: {e}")
-        logger.error(traceback.format_exc())
-        traceback.print_exc()
         regulatory_results = {"regulatory_checks": {}, "dosage_check": {}}
         pubmed_articles = []
 
+    # Build full drug data
     full_drug_data = {
         "source_data": drug_info,
         "normalization": normalization_result,
@@ -162,8 +166,6 @@ async def process_single_drug(drug_info: dict):
         logger.info(f"✅ Analysis completed for {source_name}")
     except Exception as e:
         logger.error(f"❌ Analysis failed for {source_name}: {e}")
-        logger.error(traceback.format_exc())
-        traceback.print_exc()
         final_analysis = {
             "ud_ai_grade": "Error",
             "ud_ai_justification": "Ошибка при генерации анализа",
@@ -173,13 +175,12 @@ async def process_single_drug(drug_info: dict):
     full_drug_data["ai_analysis"] = final_analysis
     
     logger.info(f"✅ Completed full analysis for: {source_name}")
-
     return full_drug_data
-
 
 async def run_analysis_pipeline(file_content: bytes):
     """
     The main orchestrator for the document analysis pipeline.
+    Same structure as demo version.
     """
     logger.info("🚀 Starting analysis pipeline")
     logger.info(f"File content size: {len(file_content)} bytes")
@@ -192,22 +193,29 @@ async def run_analysis_pipeline(file_content: bytes):
         logger.info("✅ Document loaded successfully")
     except Exception as e:
         logger.error(f"❌ Error loading document: {e}")
-        logger.error(traceback.format_exc())
-        traceback.print_exc()
         return {"error": f"Не удалось загрузить документ: {e}"}
 
     logger.info("📄 Extracting text from document...")
-    all_text = [p.text for p in document.paragraphs]
+    all_text = []
+    
+    # Extract from paragraphs
+    for paragraph in document.paragraphs:
+        if paragraph.text.strip():
+            all_text.append(paragraph.text)
+    
+    # Extract from tables
     for table in document.tables:
         for row in table.rows:
             for cell in row.cells:
-                all_text.append(cell.text)
+                if cell.text.strip():
+                    all_text.append(cell.text)
+    
     full_text = "\n".join(all_text)
     logger.info(f"📄 Extracted text length: {len(full_text)} chars")
 
     if not full_text.strip():
         logger.error("❌ Document is empty")
-        return {"error": "The document is empty."}
+        return {"error": "Документ пуст или не содержит текста."}
 
     try:
         # Generate summary and extract drugs concurrently
@@ -216,13 +224,25 @@ async def run_analysis_pipeline(file_content: bytes):
         extraction_task = protocol_parser.extract_drugs_from_text(full_text)
 
         logger.info("⏳ Waiting for summary and extraction tasks...")
-        document_summary, extracted_drugs = await asyncio.gather(summary_task, extraction_task)
+        document_summary, extracted_drugs = await asyncio.gather(
+            summary_task, 
+            extraction_task,
+            return_exceptions=True
+        )
+        
+        # Handle exceptions
+        if isinstance(document_summary, Exception):
+            logger.error(f"❌ Summary generation failed: {document_summary}")
+            document_summary = "Не удалось сгенерировать резюме"
+            
+        if isinstance(extracted_drugs, Exception):
+            logger.error(f"❌ Drug extraction failed: {extracted_drugs}")
+            extracted_drugs = []
+        
         logger.info(f"✅ Summary and extraction completed. Found {len(extracted_drugs)} drugs")
-        logger.info(f"Summary: {document_summary[:100]}...")
+        
     except Exception as e:
         logger.error(f"❌ Error in summary/extraction: {e}")
-        logger.error(traceback.format_exc())
-        traceback.print_exc()
         return {"error": f"Ошибка при анализе документа: {e}"}
 
     if not extracted_drugs:
@@ -230,7 +250,7 @@ async def run_analysis_pipeline(file_content: bytes):
         return {
             "document_summary": document_summary,
             "analysis_results": [],
-            "message": "No drugs were found in the document."
+            "message": "В документе не найдено лекарственных препаратов."
         }
 
     logger.info(f"🔄 Processing {len(extracted_drugs)} extracted drugs")
@@ -262,5 +282,4 @@ async def run_analysis_pipeline(file_content: bytes):
     except Exception as e:
         logger.error(f"❌ Error in drug analysis: {e}")
         logger.error(traceback.format_exc())
-        traceback.print_exc()
         return {"error": f"Ошибка при анализе препаратов: {e}"}

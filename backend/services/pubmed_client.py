@@ -2,6 +2,7 @@ import os
 import time
 import json
 import asyncio
+import logging
 from collections import deque
 try:
     import redis.asyncio as redis
@@ -10,6 +11,8 @@ except ImportError:
     REDIS_AVAILABLE = False
 from Bio import Entrez
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # --- Configuration ---
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -26,7 +29,7 @@ Entrez.email = PUBMED_API_EMAIL
 redis_client = None
 if REDIS_AVAILABLE:
     try:
-        redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost"))
+        redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://redis:6379"))
     except Exception as e:
         print(f"Redis connection failed: {e}. Continuing without caching.")
         redis_client = None
@@ -34,6 +37,7 @@ if REDIS_AVAILABLE:
 class PubMedClient:
     """
     A client for searching PubMed, with caching and rate limiting.
+    Same logic as demo version.
     """
     def __init__(self, reqs_per_second=9):
         self.req_interval = 1.0 / reqs_per_second
@@ -41,59 +45,97 @@ class PubMedClient:
 
     async def _rate_limit(self):
         """Ensures that requests do not exceed the rate limit."""
+        current_time = time.monotonic()
+        
+        # Remove timestamps older than 1 second
         while self.request_timestamps:
-            time_since_oldest_req = time.monotonic() - self.request_timestamps[0]
-            if time_since_oldest_req > 1.0:
+            if current_time - self.request_timestamps[0] > 1.0:
                 self.request_timestamps.popleft()
             else:
                 break
 
+        # If we have too many recent requests, wait
         if len(self.request_timestamps) >= 9:
-            wait_time = self.req_interval - (time.monotonic() - self.request_timestamps[-1])
-            if wait_time > 0:
-                await asyncio.sleep(wait_time)
+            wait_time = self.req_interval
+            await asyncio.sleep(wait_time)
 
-        self.request_timestamps.append(time.monotonic())
+        self.request_timestamps.append(current_time)
 
     async def search_articles(self, inn_name: str, brand_name: str, disease_context: str, max_results=5) -> list:
         """
-        Searches PubMed for articles, handling caching and rate limiting.
+        Searches PubMed for articles - same approach as demo.
         """
-        search_term_base = f'({inn_name}[Title/Abstract] OR "{brand_name}"[Title/Abstract]) AND ("{disease_context}"[Title/Abstract])'
-        publication_types = '"randomized controlled trial"[Publication Type] OR "meta-analysis"[Publication Type] OR "systematic review"[Publication Type]'
-        search_term = f'({search_term_base}) AND ({publication_types})'
-
+        # Build search term like in demo
+        drug_terms = [inn_name]
+        if brand_name and brand_name != inn_name:
+            drug_terms.append(brand_name)
+        
+        drug_query = " OR ".join([f'"{term}"[Title/Abstract]' for term in drug_terms])
+        
+        # Add disease context if available
+        context_query = ""
+        if disease_context and disease_context.strip():
+            context_query = f' AND "{disease_context}"[Title/Abstract]'
+        
+        # Focus on high-quality study types
+        study_types = [
+            '"randomized controlled trial"[Publication Type]',
+            '"meta-analysis"[Publication Type]',
+            '"systematic review"[Publication Type]',
+            '"clinical trial"[Publication Type]'
+        ]
+        study_query = " OR ".join(study_types)
+        
+        search_term = f'({drug_query}){context_query} AND ({study_query})'
+        
         cache_key = f"pubmed:{search_term}:{max_results}"
+        logger.info(f"🔍 PubMed search: {search_term}")
 
-        # 1. Check cache first
+        # Check cache first
         if redis_client:
             try:
                 cached_result = await redis_client.get(cache_key)
                 if cached_result:
-                    print(f"Cache hit for PubMed query: {search_term}")
+                    logger.info(f"✅ Cache hit for PubMed query")
                     return json.loads(cached_result)
             except Exception as e:
-                print(f"Redis cache read failed: {e}. Continuing without cache.")
+                logger.warning(f"Redis cache read failed: {e}")
 
-        print(f"Cache miss for PubMed query. Searching: {search_term}")
+        logger.info(f"🔍 Searching PubMed for: {inn_name}")
 
         try:
-            # 2. If not in cache, perform search (with rate limiting)
+            # Perform search with rate limiting
             await self._rate_limit()
-            handle = Entrez.esearch(db="pubmed", term=search_term, retmax=max_results, sort="relevance")
+            
+            handle = Entrez.esearch(
+                db="pubmed", 
+                term=search_term, 
+                retmax=max_results, 
+                sort="relevance"
+            )
             record = Entrez.read(handle)
             handle.close()
 
             pmids = record["IdList"]
             if not pmids:
+                logger.info(f"❌ No PubMed articles found for {inn_name}")
                 return []
 
+            logger.info(f"✅ Found {len(pmids)} PubMed articles")
+
+            # Fetch article details
             await self._rate_limit()
-            handle = Entrez.efetch(db="pubmed", id=pmids, rettype="medline", retmode="dict")
+            
+            handle = Entrez.efetch(
+                db="pubmed", 
+                id=pmids, 
+                rettype="medline", 
+                retmode="dict"
+            )
             records = handle.read()
             handle.close()
 
-            # 3. Parse results
+            # Parse results - same format as demo
             articles = []
             for rec in records:
                 article = {
@@ -105,16 +147,18 @@ class PubMedClient:
                     "link": f"https://pubmed.ncbi.nlm.nih.gov/{rec.get('PMID')}/"
                 }
                 articles.append(article)
+                logger.info(f"  📄 Found: {article['title'][:100]}...")
 
-            # 4. Store in cache (e.g., for 24 hours)
+            # Cache results
             if redis_client:
                 try:
                     await redis_client.set(cache_key, json.dumps(articles), ex=86400)
                 except Exception as e:
-                    print(f"Redis cache write failed: {e}. Continuing without caching.")
+                    logger.warning(f"Redis cache write failed: {e}")
 
+            logger.info(f"✅ PubMed search completed: {len(articles)} articles")
             return articles
 
         except Exception as e:
-            print(f"An error occurred during PubMed search: {e}")
+            logger.error(f"❌ PubMed search failed: {e}")
             return []
