@@ -116,7 +116,6 @@ const ProtocolHistory = ({ onLoadProtocol }) => {
       )}
 
       {error && <div className="error-message">{error}</div>}
-      }
 
       {filteredProtocols.length === 0 ? (
         <div className="empty-state">

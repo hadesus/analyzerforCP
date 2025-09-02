@@ -2,8 +2,11 @@ import os
 import json
 import re
 import traceback
+import logging
 import google.generativeai as genai
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -11,9 +14,12 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not GEMINI_API_KEY:
+    logger.error("❌ GEMINI_API_KEY not found in environment variables")
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 
+logger.info("✅ Gemini API key found, configuring...")
 genai.configure(api_key=GEMINI_API_KEY)
+logger.info("✅ Gemini configured successfully")
 
 # Set up the model with JSON response mode - following demo approach
 generation_config = {
@@ -203,10 +209,10 @@ async def extract_drugs_from_text(text: str) -> list:
     Simplified approach based on demo version.
     """
     if not text or not text.strip():
-        print("❌ Empty text provided")
+        logger.warning("❌ Empty text provided")
         return []
 
-    print(f"📄 Analyzing text of length: {len(text)}")
+    logger.info(f"📄 Analyzing text of length: {len(text)}")
 
     prompt = f"""Найди все лекарственные препараты в тексте клинического протокола.
 
@@ -225,7 +231,7 @@ async def extract_drugs_from_text(text: str) -> list:
 Препарат: [название] | Дозировка: [доза] | Путь: [введение] | Контекст: [использование]"""
     
     try:
-        print("🤖 Sending request to Gemini...")
+        logger.info("🤖 Sending request to Gemini...")
         model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
             generation_config={
@@ -237,25 +243,29 @@ async def extract_drugs_from_text(text: str) -> list:
         response = await model.generate_content_async(prompt)
         
         if not response or not response.text:
-            print("❌ Empty response from Gemini")
+            logger.error("❌ Empty response from Gemini")
             return []
         
-        print(f"✅ Gemini response received: {len(response.text)} chars")
+        logger.info(f"✅ Gemini response received: {len(response.text)} chars")
+        logger.debug(f"Gemini response: {response.text[:500]}...")
         
         # Parse simple text response instead of JSON
         drugs = parse_text_response(response.text)
-        print(f"✅ Extracted {len(drugs)} drugs")
+        logger.info(f"✅ Extracted {len(drugs)} drugs")
         return drugs
         
     except Exception as e:
-        print(f"❌ Error during Gemini extraction: {e}")
+        logger.error(f"❌ Error during Gemini extraction: {e}")
+        logger.error(traceback.format_exc())
         traceback.print_exc()
         return []
 
 def parse_text_response(text: str) -> list:
     """Parse simple text response from Gemini."""
+    logger.info("📋 Parsing Gemini text response...")
     drugs = []
     lines = text.strip().split('\n')
+    logger.info(f"Processing {len(lines)} lines from response")
     
     for line in lines:
         line = line.strip()
@@ -290,30 +300,11 @@ def parse_text_response(text: str) -> list:
                     "context_indication": context
                 }
                 drugs.append(drug)
-                print(f"  📋 Found drug: {drug_name}")
+                logger.info(f"  📋 Found drug: {drug_name}")
                 
         except Exception as e:
-            print(f"❌ Error parsing line '{line}': {e}")
+            logger.error(f"❌ Error parsing line '{line}': {e}")
             continue
     
+    logger.info(f"✅ Successfully parsed {len(drugs)} drugs from response")
     return drugs
-
-        
-        # Convert to the format expected by the rest of the pipeline
-        converted_drugs = []
-        for drug in extracted_drugs:
-            if isinstance(drug, dict) and drug.get("name"):
-                converted_drug = {
-                    "drug_name_source": drug.get("name", ""),
-                    "dosage_source": drug.get("dosage", ""),
-                    "route_source": drug.get("route", ""),
-                    "context_indication": f"{drug.get('frequency', '')} {drug.get('duration', '')}".strip()
-                }
-                converted_drugs.append(converted_drug)
-        
-        print(f"Successfully extracted {len(converted_drugs)} drugs from text")
-        return converted_drugs
-        
-    except Exception as e:
-        print(f"Error during Gemini extraction: {e}")
-        return []

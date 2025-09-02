@@ -52,10 +52,15 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage, setCurrent
       await new Promise(resolve => setTimeout(resolve, 500));
       onUploadSuccess(response.data);
     } catch (error) {
+      console.error('Full error object:', error);
+      console.error('Error response:', error.response);
+      console.error('Error request:', error.request);
+      
       let message = 'Произошла непредвиденная ошибка.';
       if (error.response) {
         // The request was made and the server responded with a status code
         // that falls out of the range of 2xx
+        console.error('Server responded with error:', error.response.status, error.response.data);
         const detail = error.response.data.detail;
         if (typeof detail === 'string') {
           message = `Ошибка от сервера: ${detail}`;
@@ -66,11 +71,14 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage, setCurrent
         }
       } else if (error.request) {
         // The request was made but no response was received
+        console.error('No response received:', error.request);
         message = 'Не удалось получить ответ от сервера. Проверьте, запущен ли бэкенд.';
       } else if (error.code === 'ECONNABORTED') {
+        console.error('Request timeout');
         message = 'Анализ занял слишком много времени (превышен лимит 5 минут). Попробуйте файл меньшего размера.';
       } else {
         // Something happened in setting up the request that triggered an Error
+        console.error('Request setup error:', error.message);
         message = `Ошибка при настройке запроса: ${error.message}`;
       }
       setErrorMessage(message);
