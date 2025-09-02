@@ -81,7 +81,7 @@ def clean_and_parse_json(raw_text: str) -> dict:
         print(f"Could not parse JSON, returning default structure. Raw text: {raw_text[:500]}...")
         return {
             "ud_ai_grade": "Error",
-            "ud_ai_justification": "Ошибка парсинга ответа системы анализа.",
+            "ud_ai_justification": "Ошибка парсинга ответа ИИ.",
             "ai_summary_note": "Не удалось сгенерировать анализ из-за ошибки парсинга."
         }
 async def generate_ai_analysis(full_drug_data: dict) -> dict:
@@ -122,7 +122,7 @@ async def generate_ai_analysis(full_drug_data: dict) -> dict:
         print(f"Error during final AI analysis: {e}")
         return {
             "ud_ai_grade": "Error",
-            "ud_ai_justification": "Ошибка при генерации анализа ИИ.",
+            "ud_ai_justification": "Ошибка при генерации анализа.",
             "ai_summary_note": "Произошла ошибка при генерации финального анализа."
         }
 
