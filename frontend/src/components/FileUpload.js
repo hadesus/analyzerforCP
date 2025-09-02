@@ -139,6 +139,10 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage, setCurrent
           <span className="medical-icon">📚</span>
           <span>Поиск исследований PubMed</span>
         </div>
+        <div className="upload-feature">
+          <span className="medical-icon">📖</span>
+          <span>Проверка по справочникам BNF</span>
+        </div>
       </div>
     </div>
   );
