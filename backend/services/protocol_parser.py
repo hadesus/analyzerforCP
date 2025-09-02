@@ -24,7 +24,7 @@ logger.info("✅ Gemini configured successfully")
 async def extract_drugs_from_text(text: str) -> list:
     """
     Uses Gemini to extract drug information from clinical protocol text.
-    Uses the same approach as the demo version for reliable extraction.
+    Uses the same unified approach as the demo version for better extraction.
     """
     if not text or not text.strip():
         logger.warning("❌ Empty text provided")
@@ -32,29 +32,28 @@ async def extract_drugs_from_text(text: str) -> list:
 
     logger.info(f"📄 Analyzing text of length: {len(text)}")
 
-    # Use the exact same prompt structure as demo
-    prompt = f"""Проанализируй следующий текст клинического протокола и извлеки все упоминания лекарственных препаратов.
+    # Use the same unified prompt structure as the demo for better results
+    prompt = f"""Проанализируй следующий текст из клинического протокола. Твоя задача - выступить в роли эксперта по оценке медицинских технологий.
 
-Для каждого препарата предоставь следующую информацию в формате JSON:
-
-{{
-  "drugs": [
-    {{
-      "drug_name_source": "точное название препарата как указано в тексте",
-      "dosage_source": "дозировка (например: 10 мг, 500 мг/сут, 1 таблетка)",
-      "route_source": "путь введения (например: перорально, внутривенно, местно)",
-      "context_indication": "контекст применения или показание"
-    }}
-  ]
-}}
+Выполни следующие шаги:
+1. Извлеки ВСЕ упомянутые в тексте лекарственные средства.
+2. Для КАЖДОГО лекарства, предоставь следующую информацию в виде JSON объекта:
+   - "drug_name_source": (String) Название препарата, как оно указано в тексте.
+   - "inn_name": (String) Международное непатентованное наименование (МНН) на английском языке. Если не можешь определить, напиши "Unknown".
+   - "dosage_source": (String) Дозировка и способ введения, как указано в тексте.
+   - "route_source": (String) Путь введения (перорально, внутривенно, местно и т.д.).
+   - "context_indication": (String) Контекст применения или показание из протокола.
 
 ВАЖНО: 
-- Извлекай ВСЕ упоминания лекарственных средств
+- Извлекай ВСЕ упоминания лекарственных средств, включая витамины, БАДы, вакцины
 - Используй точные названия из текста
+- МНН должно быть на английском языке для поиска в международных базах
 - Если информация отсутствует, используй пустую строку ""
 - Ответ должен быть валидным JSON
 
-Текст протокола:
+Верни ТОЛЬКО JSON объект с ключом "drugs", который является массивом объектов, описанных выше. Не добавляй никаких пояснений или текста до или после JSON.
+
+Текст протокола (первые 50000 символов):
 ---
 {text[:50000]}
 ---
@@ -62,7 +61,7 @@ async def extract_drugs_from_text(text: str) -> list:
 JSON ответ:"""
     
     try:
-        logger.info("🤖 Sending request to Gemini...")
+        logger.info("🤖 Sending unified extraction request to Gemini...")
         model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
             generation_config={
@@ -83,21 +82,31 @@ JSON ответ:"""
         
         # Parse JSON response
         try:
-            parsed_data = json.loads(response.text)
+            # Clean the response from possible ```json ... ``` wrappers
+            cleaned_response = response.text.strip()
+            cleaned_response = re.sub(r'^```json\s*|```\s*$', '', cleaned_response, flags=re.MULTILINE)
+            
+            parsed_data = json.loads(cleaned_response)
             drugs_list = parsed_data.get("drugs", [])
             
-            # Convert to expected format
+            # Validate and format drugs
             formatted_drugs = []
             for drug in drugs_list:
+                if not drug.get("drug_name_source"):
+                    continue
+                    
                 formatted_drug = {
-                    "drug_name_source": drug.get("drug_name_source", ""),
-                    "dosage_source": drug.get("dosage_source", ""),
-                    "route_source": drug.get("route_source", ""),
-                    "context_indication": drug.get("context_indication", "")
+                    "drug_name_source": drug.get("drug_name_source", "").strip(),
+                    "inn_name": drug.get("inn_name", "").strip(),
+                    "dosage_source": drug.get("dosage_source", "").strip(),
+                    "route_source": drug.get("route_source", "").strip(),
+                    "context_indication": drug.get("context_indication", "").strip()
                 }
-                if formatted_drug["drug_name_source"]:  # Only add if has name
+                
+                # Skip if no meaningful data
+                if formatted_drug["drug_name_source"]:
                     formatted_drugs.append(formatted_drug)
-                    logger.info(f"  📋 Found drug: {formatted_drug['drug_name_source']}")
+                    logger.info(f"  📋 Found drug: {formatted_drug['drug_name_source']} (INN: {formatted_drug['inn_name']})")
             
             logger.info(f"✅ Successfully extracted {len(formatted_drugs)} drugs")
             return formatted_drugs
@@ -129,6 +138,7 @@ def extract_drugs_from_text_fallback(text: str) -> list:
         # Try to find drug names (common patterns)
         drug_patterns = [
             r'"drug_name_source":\s*"([^"]+)"',
+            r'"name_author":\s*"([^"]+)"',
             r'препарат[:\s]+([А-Яа-яA-Za-z\s\-]+)',
             r'лекарство[:\s]+([А-Яа-яA-Za-z\s\-]+)',
             r'([А-Я][а-я]+(?:\s+[А-Я][а-я]+)*)\s*(?:\d+\s*мг|\d+\s*г|таблетк)'
@@ -141,6 +151,7 @@ def extract_drugs_from_text_fallback(text: str) -> list:
                 if len(drug_name) > 2 and drug_name not in [d["drug_name_source"] for d in drugs]:
                     drugs.append({
                         "drug_name_source": drug_name,
+                        "inn_name": "",
                         "dosage_source": "",
                         "route_source": "",
                         "context_indication": ""

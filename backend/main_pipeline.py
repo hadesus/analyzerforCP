@@ -30,8 +30,9 @@ try:
     logger.info("✅ ai_analyzer imported")
     
 except ImportError as e:
-    logger.error(f"❌ Failed to import services: {e}")
-    logger.error(traceback.format_exc())
+    logger.error(f"❌ Import error: {e}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
+    traceback.print_exc()
     raise
 
 # Instantiate clients/services
@@ -77,12 +78,14 @@ async def generate_document_summary(full_text: str) -> str:
         logger.error(f"❌ Error generating document summary: {e}")
         return "Не удалось сгенерировать резюме документа."
 
-async def process_single_drug(drug_info: dict):
+async def process_single_drug(drug_info: dict, document_context: str = ""):
     """
     Processes a single drug through the complete analysis pipeline.
-    Same logic as demo version.
+    Enhanced to use existing INN from extraction and better context.
     """
     source_name = drug_info.get("drug_name_source")
+    existing_inn = drug_info.get("inn_name", "")
+    
     if not source_name:
         logger.warning(f"❌ Skipping drug with no source name: {drug_info}")
         return None
@@ -91,7 +94,12 @@ async def process_single_drug(drug_info: dict):
     
     try:
         logger.info(f"🔄 Normalizing drug name: {source_name}")
-        normalization_result = await drug_normalizer.normalize_drug(source_name)
+        # Use existing INN if provided by extraction
+        if existing_inn and existing_inn.lower() not in ['unknown', 'не определен']:
+            normalization_result = await drug_normalizer.normalize_drug_with_existing_inn(source_name, existing_inn)
+        else:
+            normalization_result = await drug_normalizer.normalize_drug(source_name)
+        
         inn_name = normalization_result.get("inn_name")
         logger.info(f"✅ Normalization result: {normalization_result}")
     except Exception as e:
@@ -118,6 +126,12 @@ async def process_single_drug(drug_info: dict):
     try:
         logger.info(f"🔍 Starting regulatory and PubMed checks for {inn_name}")
         
+        # Enhanced context for PubMed search
+        search_context = drug_info.get("context_indication", "")
+        if not search_context and document_context:
+            # Use document context if drug context is empty
+            search_context = document_context[:200]  # First 200 chars of document
+        
         # Run regulatory and PubMed checks in parallel
         regulatory_task = regulatory_checker.check_all_regulators(
             inn_name=inn_name,
@@ -127,7 +141,7 @@ async def process_single_drug(drug_info: dict):
         pubmed_task = pubmed.search_articles(
             inn_name=inn_name,
             brand_name=source_name,
-            disease_context=drug_info.get("context_indication", "")
+            disease_context=search_context
         )
 
         logger.info("🔄 Running regulatory and PubMed tasks in parallel...")
@@ -179,10 +193,9 @@ async def process_single_drug(drug_info: dict):
 
 async def run_analysis_pipeline(file_content: bytes):
     """
-    The main orchestrator for the document analysis pipeline.
-    Same structure as demo version.
+    Enhanced main orchestrator using unified extraction approach like demo.
     """
-    logger.info("🚀 Starting analysis pipeline")
+    logger.info("🚀 Starting enhanced analysis pipeline")
     logger.info(f"File content size: {len(file_content)} bytes")
     
     file_stream = io.BytesIO(file_content)
@@ -219,7 +232,7 @@ async def run_analysis_pipeline(file_content: bytes):
 
     try:
         # Generate summary and extract drugs concurrently
-        logger.info("🔄 Starting summary and drug extraction")
+        logger.info("🔄 Starting summary and unified drug extraction")
         summary_task = generate_document_summary(full_text)
         extraction_task = protocol_parser.extract_drugs_from_text(full_text)
 
@@ -255,11 +268,12 @@ async def run_analysis_pipeline(file_content: bytes):
 
     logger.info(f"🔄 Processing {len(extracted_drugs)} extracted drugs")
     for i, drug in enumerate(extracted_drugs):
-        logger.info(f"  Drug {i+1}: {drug.get('drug_name_source', 'Unknown')}")
+        logger.info(f"  Drug {i+1}: {drug.get('drug_name_source', 'Unknown')} (INN: {drug.get('inn_name', 'Unknown')})")
 
     try:
         logger.info("🔄 Starting parallel drug analysis...")
-        analysis_tasks = [process_single_drug(drug) for drug in extracted_drugs]
+        # Pass document context to each drug processing
+        analysis_tasks = [process_single_drug(drug, full_text[:1000]) for drug in extracted_drugs]
         analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
         logger.info("✅ All drug analysis tasks completed")
         

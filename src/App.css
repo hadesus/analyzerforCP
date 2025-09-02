@@ -207,9 +207,142 @@
 +}
 +
 +.profile-btn {
+/* Enhanced loading styles */
+.loading-stage {
 +  display: flex;
 +  align-items: center;
+  gap: var(--space-lg);
+  margin: var(--space-xl) 0;
+  padding: var(--space-lg);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  border: 1px solid var(--neutral-200);
+}
+
+.stage-icon {
+  font-size: 2rem;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.stage-info {
+  flex: 1;
+}
+
+.stage-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--medical-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.stage-description {
+  font-size: 0.9rem;
+  color: var(--neutral-600);
+  line-height: 1.4;
+}
+
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+  width: 100%;
+  max-width: 400px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--neutral-200);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--medical-primary), var(--medical-secondary));
+  border-radius: 4px;
+  transition: width 0.5s ease;
+  position: relative;
+}
+
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: progressShine 2s ease-in-out infinite;
+}
+
+@keyframes progressShine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.progress-text {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--medical-primary);
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 50px;
+  text-align: right;
+}
+
+.stages-list {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-xl);
+  padding: var(--space-lg);
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
 +  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.stage-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: 1;
+  min-width: 100px;
+  padding: var(--space-sm);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.stage-item.completed {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--medical-success);
+}
+
+.stage-item.active {
+  background: rgba(0, 102, 204, 0.1);
+  color: var(--medical-primary);
+  transform: scale(1.05);
+}
+
+.stage-marker {
+  font-size: 1.25rem;
+  margin-bottom: var(--space-xs);
+}
+
+.stage-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.2;
+}
+
 +  padding: var(--space-sm) var(--space-md);
 +  background: white;
 +  border: 2px solid var(--neutral-200);
@@ -501,6 +634,19 @@
    
   .storage-stats {
     gap: var(--space-md);
+  }
+  
+  .stages-list {
+    gap: var(--space-xs);
+  }
+  
+  .stage-item {
+    min-width: 80px;
+    padding: var(--space-xs);
+  }
+  
+  .stage-label {
+    font-size: 0.7rem;
   }
   
 +  .protocol-history-header {

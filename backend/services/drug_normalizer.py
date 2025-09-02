@@ -51,7 +51,7 @@ async def _normalize_with_rxnav(drug_name: str, client: httpx.AsyncClient) -> st
         return None
 
 async def _normalize_with_gemini(drug_name: str) -> str | None:
-    """Uses Gemini to find the INN for a drug name - same as demo."""
+    """Uses Gemini to find the INN for a drug name."""
     prompt = f"""Найди международное непатентованное наименование (МНН/INN) для препарата "{drug_name}".
 
 Ответь ТОЛЬКО названием МНН на английском языке, без дополнительных слов.
@@ -61,6 +61,8 @@ async def _normalize_with_gemini(drug_name: str) -> str | None:
 Парацетамол → Paracetamol
 Ибупрофен → Ibuprofen
 Амоксициллин → Amoxicillin
+Метформин → Metformin
+Лизиноприл → Lisinopril
 
 Препарат: {drug_name}
 МНН:"""
@@ -84,7 +86,8 @@ async def _normalize_with_gemini(drug_name: str) -> str | None:
 
 async def normalize_drug(drug_name: str) -> dict:
     """
-    Orchestrates the drug normalization process - same logic as demo.
+    Orchestrates the drug normalization process.
+    If INN is already provided by extraction, use it; otherwise normalize.
     """
     if not drug_name or not isinstance(drug_name, str) or not drug_name.strip():
         return {"inn_name": None, "source": "N/A", "confidence": "none"}
@@ -104,3 +107,12 @@ async def normalize_drug(drug_name: str) -> dict:
             return {"inn_name": inn_name, "source": "Gemini", "confidence": "medium"}
 
     return {"inn_name": None, "source": "N/A", "confidence": "none"}
+
+async def normalize_drug_with_existing_inn(drug_name: str, existing_inn: str) -> dict:
+    """
+    Uses existing INN if provided, otherwise normalizes the drug name.
+    """
+    if existing_inn and existing_inn.strip() and existing_inn.lower() not in ['unknown', 'не определен', 'не определено']:
+        return {"inn_name": existing_inn.strip(), "source": "Extracted", "confidence": "high"}
+    
+    return await normalize_drug(drug_name)

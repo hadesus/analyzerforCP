@@ -83,14 +83,24 @@ const ResultsTable = ({ results, requestSort, sortConfig }) => {
                     {article.title}
                   </a>
                   <div className="pubmed-meta">
-                    {article.journal} • {article.publication_date}
+                    <span className="publication-type">
+                      {article.publication_type || 'Article'}
+                    </span>
+                    <span className="journal-date">
+                      {article.journal} • {article.publication_date}
+                    </span>
+                    {article.abstract_preview && (
+                      <div className="abstract-preview">
+                        {article.abstract_preview}
+                      </div>
+                    )}
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
             <p style={{ color: 'var(--neutral-500)', fontStyle: 'italic' }}>
-              Исследования не найдены
+              Исследования не найдены. Попробуйте ручной поиск в PubMed по запросу: "{item.normalization?.inn_name} AND {item.source_data?.context_indication}"
             </p>
           )}
         </div>
