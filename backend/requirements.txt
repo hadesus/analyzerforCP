@@ -9,3 +9,4 @@ openpyxl
 lxml
 biopython
 httpx
+python-multipart
