@@ -62,7 +62,7 @@ async def generate_ai_analysis(full_drug_data: dict) -> dict:
     try:
         # Configure model with JSON schema
         model_with_schema = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-flash",
             generation_config={
                 "temperature": 0.1,
                 "top_p": 1,
@@ -97,7 +97,7 @@ async def generate_ai_analysis(full_drug_data: dict) -> dict:
 
 # Export the model for use in other modules
 gemini_model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
+    model_name="gemini-2.5-flash",
     generation_config={
         "temperature": 0.1,
         "top_p": 1,

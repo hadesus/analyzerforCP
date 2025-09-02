@@ -23,7 +23,7 @@ generation_config = {
 }
 
 model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
+    model_name="gemini-2.5-flash",
     generation_config=generation_config
 )
 
@@ -95,7 +95,7 @@ async def extract_drugs_from_text(text: str) -> list:
     try:
         # Configure the model to use JSON schema
         model_with_schema = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-flash",
             generation_config={
                 "temperature": 0.1,
                 "top_p": 1,

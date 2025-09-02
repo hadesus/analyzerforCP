@@ -91,7 +91,7 @@ async def _check_with_gemini(inn_name: str, regulator: str) -> dict:
     
     try:
         model_with_schema = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-flash",
             generation_config={
                 "temperature": 0.1,
                 "response_mime_type": "application/json",
@@ -125,7 +125,7 @@ async def _compare_dosages_with_gemini(source_dosage: str, standard_dosage_text:
     
     try:
         model_with_schema = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            model_name="gemini-2.5-flash",
             generation_config={
                 "temperature": 0.1,
                 "response_mime_type": "application/json",
