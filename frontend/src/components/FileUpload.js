@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
+const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage, setCurrentStage, setProgress }) => {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleFileUpload = async (file) => {
@@ -10,15 +10,39 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
     setIsLoading(true);
     setErrorMessage('');
     onUploadSuccess(null);
+    setCurrentStage('parsing');
+    setProgress(0);
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setProgress(prev => Math.min(prev + Math.random() * 10, 90));
+      }, 1000);
+
+      setCurrentStage('extraction');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setCurrentStage('normalization');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      setCurrentStage('regulatory');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      setCurrentStage('pubmed');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      setCurrentStage('analysis');
+
       const response = await axios.post('http://localhost:8000/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 300000, // 5 minutes
       });
+      
+      clearInterval(progressInterval);
+      setProgress(100);
       onUploadSuccess(response.data);
     } catch (error) {
       let message = 'Произошла непредвиденная ошибка.';
@@ -45,6 +69,8 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
       setErrorMessage(message);
     } finally {
       setIsLoading(false);
+      setCurrentStage('parsing');
+      setProgress(0);
     }
   };
 
@@ -91,7 +117,7 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
       <div className="upload-features">
         <div className="upload-feature">
           <span className="medical-icon">🔍</span>
-          <span>Автоматическое извлечение препаратов</span>
+          <span>NLP извлечение препаратов</span>
         </div>
         <div className="upload-feature">
           <span className="medical-icon">🏛️</span>
@@ -99,7 +125,7 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
         </div>
         <div className="upload-feature">
           <span className="medical-icon">📈</span>
-          <span>GRADE анализ доказательности</span>
+          <span>LLM анализ доказательности</span>
         </div>
       </div>
     </div>

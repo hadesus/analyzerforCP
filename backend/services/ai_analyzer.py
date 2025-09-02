@@ -37,7 +37,7 @@ def get_final_analysis_prompt(full_drug_data: dict) -> str:
     context_str = json.dumps(full_drug_data, indent=2, ensure_ascii=False)
 
     return f"""
-    Ты клинический фармаколог и эксперт по доказательной медицине. Проанализируй данные о препарате и предоставь финальную оценку.
+    Ты система анализа клинических данных. Проанализируй данные о препарате и предоставь финальную оценку.
 
     Данные о препарате:
     {context_str}

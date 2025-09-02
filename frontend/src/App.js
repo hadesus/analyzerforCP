@@ -45,6 +45,8 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [filterText, setFilterText] = useState('');
+  const [currentStage, setCurrentStage] = useState('parsing');
+  const [progress, setProgress] = useState(0);
 
   const analysisResults = analysisData?.analysis_results || [];
   const documentSummary = analysisData?.document_summary;
@@ -70,11 +72,11 @@ function App() {
       
       <header className="App-header">
         <h1>Анализатор Клинических Протоколов</h1>
-        <p className="subtitle">Профессиональный анализ медицинских документов с использованием ИИ</p>
+        <p className="subtitle">Профессиональный анализ медицинских документов с использованием NLP и LLM</p>
         <div className="features">
           <div className="feature-badge">
-            <span>🤖</span>
-            <span>ИИ Анализ</span>
+            <span>🔬</span>
+            <span>NLP Анализ</span>
           </div>
           <div className="feature-badge">
             <span>🏥</span>
@@ -97,10 +99,12 @@ function App() {
             onUploadSuccess={setAnalysisData}
             setIsLoading={setIsLoading}
             setErrorMessage={setErrorMessage}
+            setCurrentStage={setCurrentStage}
+            setProgress={setProgress}
           />
         </div>
         
-        {isLoading && <LoadingIndicator />}
+        {isLoading && <LoadingIndicator currentStage={currentStage} progress={progress} />}
         {errorMessage && <ErrorMessage message={errorMessage} />}
 
         {analysisData && (

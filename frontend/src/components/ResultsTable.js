@@ -96,7 +96,7 @@ const ResultsTable = ({ results, requestSort, sortConfig }) => {
         </div>
 
         <div className="detail-section">
-          <h5>🧠 Детальный анализ ИИ</h5>
+          <h5>📊 Детальный анализ</h5>
           <div className="data-card">
             <div className="data-label">Обоснование GRADE</div>
             <div className="data-value">{item.ai_analysis?.ud_ai_justification || 'Не предоставлено'}</div>
@@ -128,9 +128,9 @@ const ResultsTable = ({ results, requestSort, sortConfig }) => {
             Дозировка (Источник){getSortIndicator('source_data.dosage_source')}
           </th>
           <th onClick={() => requestSort('ai_analysis.ud_ai_grade')}>
-            🧠 GRADE Анализ{getSortIndicator('ai_analysis.ud_ai_grade')}
+            📊 GRADE Анализ{getSortIndicator('ai_analysis.ud_ai_grade')}
           </th>
-          <th>📝 Заметка ИИ</th>
+          <th>📝 Заметка анализа</th>
         </tr>
       </thead>
       <tbody>
