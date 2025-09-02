@@ -9,7 +9,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
 
 def get_final_analysis_prompt(full_drug_data: dict) -> str:
     # Convert dict to a pretty JSON string for clear presentation in the prompt

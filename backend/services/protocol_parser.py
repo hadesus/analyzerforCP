@@ -21,7 +21,7 @@ generation_config = {
   "max_output_tokens": 8192,
 }
 
-model = genai.GenerativeModel(model_name="gemini-1.5-flash",
+model = genai.GenerativeModel(model_name="gemini-2.5-flash",
                               generation_config=generation_config)
 
 def get_extraction_prompt():

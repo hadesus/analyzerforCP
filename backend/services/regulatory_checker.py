@@ -11,7 +11,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
 
 # --- API Base URLs ---
 OPENFDA_API_URL = "https://api.fda.gov/drug/label.json"

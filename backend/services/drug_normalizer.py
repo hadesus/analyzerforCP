@@ -11,7 +11,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
+gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
 
 # --- RxNav API Configuration ---
 RXNAV_API_BASE_URL = "https://rxnav.nlm.nih.gov/REST"
