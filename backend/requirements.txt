@@ -8,3 +8,4 @@ redis
 openpyxl
 lxml
 biopython
+httpx
