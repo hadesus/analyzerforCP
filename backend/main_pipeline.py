@@ -103,20 +103,14 @@ async def run_analysis_pipeline(file_content: bytes):
 
     document_summary, extracted_drugs = await asyncio.gather(summary_task, extraction_task)
 
-    if isinstance(extracted_drugs, dict) and "error" in extracted_drugs:
-        return {
-            "document_summary": document_summary,
-            "analysis_results": [],
-            "error": "Failed to extract drugs from document.", 
-            "details": extracted_drugs.get("details", "Unknown error")
-        }
-
     if not extracted_drugs:
         return {
             "document_summary": document_summary,
             "analysis_results": [],
             "message": "No drugs were found in the document."
         }
+
+    print(f"Processing {len(extracted_drugs)} extracted drugs")
 
     analysis_tasks = [process_single_drug(drug) for drug in extracted_drugs]
     analysis_results = await asyncio.gather(*analysis_tasks)
