@@ -1,6 +1,7 @@
 import httpx
 import os
 import json
+import re
 import asyncio
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -46,6 +47,33 @@ def get_dosage_comparison_schema():
         },
         "required": ["comparison_result"]
     }
+
+def clean_and_parse_json(raw_text: str, fallback_dict: dict) -> dict:
+    """
+    Attempts to clean and parse potentially malformed JSON from Gemini.
+    """
+    try:
+        return json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        print(f"Initial JSON parse failed: {e}")
+        
+        # Clean common issues
+        cleaned_text = raw_text.strip()
+        cleaned_text = re.sub(r'```json\s*', '', cleaned_text)
+        cleaned_text = re.sub(r'```\s*$', '', cleaned_text)
+        
+        try:
+            # Find the last complete closing brace
+            last_brace = cleaned_text.rfind('}')
+            if last_brace != -1:
+                truncated_text = cleaned_text[:last_brace + 1]
+                return json.loads(truncated_text)
+        except json.JSONDecodeError:
+            pass
+        
+        # Return fallback
+        print(f"Could not parse JSON, returning fallback. Raw text: {raw_text[:500]}...")
+        return fallback_dict
 
 async def _check_fda(inn_name: str, client: httpx.AsyncClient) -> dict:
     """Checks drug status and gets dosage info from openFDA."""
@@ -100,7 +128,7 @@ async def _check_with_gemini(inn_name: str, regulator: str) -> dict:
         )
         
         response = await model_with_schema.generate_content_async(prompt)
-        return json.loads(response.text)
+        return clean_and_parse_json(response.text, {"status": "Error", "note": f"Ошибка при проверке: парсинг JSON"})
         
     except Exception as e:
         print(f"Error checking {regulator} with Gemini: {e}")
@@ -134,7 +162,7 @@ async def _compare_dosages_with_gemini(source_dosage: str, standard_dosage_text:
         )
         
         response = await model_with_schema.generate_content_async(prompt)
-        return json.loads(response.text)
+        return clean_and_parse_json(response.text, {"comparison_result": "mismatch"})
         
     except Exception as e:
         print(f"Error comparing dosages with Gemini: {e}")
