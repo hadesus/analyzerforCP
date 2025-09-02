@@ -71,7 +71,7 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
 
   return (
     <div
-      className={`file-upload-area ${isDragOver ? 'drag-over' : ''}`}
+      className={`file-upload-container ${isDragOver ? 'drag-over' : ''}`}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
@@ -85,7 +85,9 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
         onChange={handleFileChange}
         accept=".docx"
       />
+      <div className="upload-icon">📄</div>
       <p>Перетащите .docx файл сюда или нажмите для выбора</p>
+      <p className="upload-hint">Поддерживаются только файлы формата .docx</p>
     </div>
   );
 };

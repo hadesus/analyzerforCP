@@ -31,14 +31,17 @@ const ExportButtons = ({ results }) => {
   };
 
   return (
-    <div className="export-buttons" style={{ marginTop: '20px', textAlign: 'right' }}>
-      <button onClick={() => handleExport('docx')} style={{ marginRight: '10px' }}>
+    <div className="export-container">
+      <button onClick={() => handleExport('docx')} className="export-btn docx">
+        <span>📄</span>
         Экспорт в DOCX
       </button>
-      <button onClick={() => handleExport('xlsx')} style={{ marginRight: '10px' }}>
+      <button onClick={() => handleExport('xlsx')} className="export-btn xlsx">
+        <span>📊</span>
         Экспорт в Excel (XLSX)
       </button>
-      <button onClick={() => handleExport('json')}>
+      <button onClick={() => handleExport('json')} className="export-btn json">
+        <span>🔧</span>
         Экспорт в JSON
       </button>
     </div>

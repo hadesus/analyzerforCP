@@ -3,6 +3,8 @@ import './App.css';
 import FileUpload from './components/FileUpload';
 import ResultsTable from './components/ResultsTable';
 import ExportButtons from './components/ExportButtons';
+import LoadingIndicator from './components/LoadingIndicator';
+import ErrorMessage from './components/ErrorMessage';
 
 const useSortableData = (items, config = null) => {
   const [sortConfig, setSortConfig] = useState(config);
@@ -62,39 +64,52 @@ function App() {
 
   return (
     <div className="App">
+      <div className="medical-pattern"></div>
       <header className="App-header">
         <h1>Анализатор Клинических Протоколов</h1>
+        <p className="subtitle">Профессиональный анализ медицинских документов с использованием ИИ</p>
       </header>
       <main>
-        <FileUpload
-          onUploadSuccess={setAnalysisData}
-          setIsLoading={setIsLoading}
-          setErrorMessage={setErrorMessage}
-        />
-        {isLoading && <div className="loading-indicator">Анализ документа... Это может занять несколько минут.</div>}
-        {errorMessage && <div className="error-message">{errorMessage}</div>}
+        <div className="glass-card">
+          <FileUpload
+            onUploadSuccess={setAnalysisData}
+            setIsLoading={setIsLoading}
+            setErrorMessage={setErrorMessage}
+          />
+        </div>
+        
+        {isLoading && <LoadingIndicator />}
+        {errorMessage && <ErrorMessage message={errorMessage} />}
 
         {analysisData && (
-          <div className="results-container">
+          <div className="results-container fade-in-up">
             {documentSummary && (
               <div className="summary-container">
                 <h3>Общее резюме документа</h3>
                 <p>{documentSummary}</p>
               </div>
             )}
-            <input
-              type="text"
-              placeholder="Фильтр по названию или МНН..."
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              style={{ width: '100%', padding: '10px', margin: '20px 0', boxSizing: 'border-box' }}
-            />
+            
+            <div className="filter-container">
+              <div className="filter-icon">🔍</div>
+              <input
+                type="text"
+                className="filter-input"
+                placeholder="Поиск по названию препарата или МНН..."
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+              />
+            </div>
+            
             <ExportButtons results={filteredResults} />
-            <ResultsTable
-              results={filteredResults}
-              requestSort={requestSort}
-              sortConfig={sortConfig}
-            />
+            
+            <div className="table-container">
+              <ResultsTable
+                results={filteredResults}
+                requestSort={requestSort}
+                sortConfig={sortConfig}
+              />
+            </div>
           </div>
         )}
       </main>
