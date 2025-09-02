@@ -142,11 +142,8 @@ async def check_all_regulators(inn_name: str, source_dosage: str):
         regulatory_status = dict(zip(tasks.keys(), results))
 
         # Perform dosage check using FDA data
-        fda_result = regulatory_results.get("regulatory_checks", {}).get("FDA", {})
+        fda_result = regulatory_status.get("FDA", {})
         if isinstance(fda_result, dict) and fda_result.get("standard_dosage_text"):
             dosage_comparison = await _compare_dosages_with_gemini(source_dosage, fda_result["standard_dosage_text"])
-            regulatory_results["dosage_check"] = dosage_comparison
         else:
-            regulatory_results["dosage_check"] = {"comparison_result": "mismatch"}
-
-        return regulatory_results
+            dosage_comparison = {"comparison_result": "mismatch"}

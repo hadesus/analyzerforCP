@@ -7,6 +7,7 @@ import json
 import sys
 import os
 import datetime
+import io
 
 # Add the current directory to Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
