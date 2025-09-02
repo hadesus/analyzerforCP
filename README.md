@@ -107,4 +107,5 @@ The easiest way to get the entire application running is with Docker Compose.
         docker-compose up --build
         ```
     - This command will build the images for the backend and frontend, and start all three services (`backend`, `frontend`, `redis`).
+    - **Note:** If you change any configuration files (like `package.json` or `Dockerfile`), you need to run with the `--build` flag again to apply the changes to the image.
     - The frontend will be available at `http://localhost:3000`.

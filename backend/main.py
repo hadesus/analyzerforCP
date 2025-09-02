@@ -1,10 +1,24 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from backend.main_pipeline import run_analysis_pipeline
 from backend.services import exporter
 import json
 
 app = FastAPI()
+
+# Set up CORS middleware
+origins = [
+    "http://localhost:3000", # The address of the React frontend
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def read_root():
