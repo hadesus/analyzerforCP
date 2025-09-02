@@ -4,9 +4,7 @@ python-docx
 python-dotenv
 google-generativeai
 requests
-redis
 openpyxl
 lxml
 biopython
 httpx
-python-multipart

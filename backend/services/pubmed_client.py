@@ -3,7 +3,11 @@ import time
 import json
 import asyncio
 from collections import deque
-import redis.asyncio as redis
+try:
+    import redis.asyncio as redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
 from Bio import Entrez
 from dotenv import load_dotenv
 
@@ -18,8 +22,14 @@ if not PUBMED_API_EMAIL:
 Entrez.api_key = PUBMED_API_KEY
 Entrez.email = PUBMED_API_EMAIL
 
-# Redis client for caching
-redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost"))
+# Redis client for caching (optional)
+redis_client = None
+if REDIS_AVAILABLE:
+    try:
+        redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost"))
+    except Exception as e:
+        print(f"Redis connection failed: {e}. Continuing without caching.")
+        redis_client = None
 
 class PubMedClient:
     """
@@ -56,10 +66,14 @@ class PubMedClient:
         cache_key = f"pubmed:{search_term}:{max_results}"
 
         # 1. Check cache first
-        cached_result = await redis_client.get(cache_key)
-        if cached_result:
-            print(f"Cache hit for PubMed query: {search_term}")
-            return json.loads(cached_result)
+        if redis_client:
+            try:
+                cached_result = await redis_client.get(cache_key)
+                if cached_result:
+                    print(f"Cache hit for PubMed query: {search_term}")
+                    return json.loads(cached_result)
+            except Exception as e:
+                print(f"Redis cache read failed: {e}. Continuing without cache.")
 
         print(f"Cache miss for PubMed query. Searching: {search_term}")
 
@@ -93,7 +107,11 @@ class PubMedClient:
                 articles.append(article)
 
             # 4. Store in cache (e.g., for 24 hours)
-            await redis_client.set(cache_key, json.dumps(articles), ex=86400)
+            if redis_client:
+                try:
+                    await redis_client.set(cache_key, json.dumps(articles), ex=86400)
+                except Exception as e:
+                    print(f"Redis cache write failed: {e}. Continuing without caching.")
 
             return articles
 
