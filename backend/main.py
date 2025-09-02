@@ -1,8 +1,8 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from backend.main_pipeline import run_analysis_pipeline
-from backend.services import exporter
+from main_pipeline import run_analysis_pipeline
+from services import exporter
 import json
 
 app = FastAPI()
