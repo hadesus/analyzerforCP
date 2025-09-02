@@ -19,3 +19,9 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# Node
+frontend/node_modules/
+frontend/build/
+.pnp
+.pnp.js

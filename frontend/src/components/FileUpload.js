@@ -15,23 +15,32 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
     formData.append('file', file);
 
     try {
-      // Use a longer timeout for potentially long analysis times
       const response = await axios.post('/analyze', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 300000, // 5 minutes timeout
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000, // 5 minutes
       });
-      onUploadSuccess(response.data.analysis_results);
+      onUploadSuccess(response.data);
     } catch (error) {
-      const detail = error.response?.data?.detail;
-      let message = 'Произошла ошибка при загрузке или анализе файла.';
-      if (typeof detail === 'string') {
-        message = detail;
-      } else if (typeof detail?.detail === 'string') {
-        message = detail.detail;
+      let message = 'Произошла непредвиденная ошибка.';
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        const detail = error.response.data.detail;
+        if (typeof detail === 'string') {
+          message = `Ошибка от сервера: ${detail}`;
+        } else if (typeof detail === 'object' && detail !== null) {
+          message = `Ошибка от сервера: ${JSON.stringify(detail)}`;
+        } else {
+          message = `Ошибка от сервера: ${error.response.status} ${error.response.statusText}`;
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        message = 'Не удалось получить ответ от сервера. Проверьте, запущен ли бэкенд.';
       } else if (error.code === 'ECONNABORTED') {
         message = 'Анализ занял слишком много времени (превышен лимит 5 минут). Попробуйте файл меньшего размера.';
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        message = `Ошибка при настройке запроса: ${error.message}`;
       }
       setErrorMessage(message);
     } finally {
@@ -39,22 +48,9 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
     }
   };
 
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
+  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); };
+  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); };
+  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
 
   const handleDrop = (e) => {
     e.preventDefault();
