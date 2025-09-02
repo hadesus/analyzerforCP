@@ -6,7 +6,7 @@ import asyncio
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-# --- AI Configuration ---
+# --- Configuration ---
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
@@ -16,64 +16,6 @@ genai.configure(api_key=GEMINI_API_KEY)
 # --- API Base URLs ---
 OPENFDA_API_URL = "https://api.fda.gov/drug/label.json"
 EMA_API_URL = "https://epi.developer.ema.europa.eu/api/retrieval/listbysearchparameter"
-
-def get_regulatory_check_schema():
-    """Returns JSON schema for regulatory checks."""
-    return {
-        "type": "object",
-        "properties": {
-            "status": {
-                "type": "string",
-                "description": "Статус препарата: Approved, Not Approved, или Unknown"
-            },
-            "note": {
-                "type": "string",
-                "description": "Краткая заметка на русском языке"
-            }
-        },
-        "required": ["status", "note"]
-    }
-
-def get_dosage_comparison_schema():
-    """Returns JSON schema for dosage comparison."""
-    return {
-        "type": "object",
-        "properties": {
-            "comparison_result": {
-                "type": "string",
-                "enum": ["within_range", "below_range", "above_range", "mismatch"],
-                "description": "Результат сравнения дозировок"
-            }
-        },
-        "required": ["comparison_result"]
-    }
-
-def clean_and_parse_json(raw_text: str, fallback_dict: dict) -> dict:
-    """
-    Attempts to clean and parse potentially malformed JSON from Gemini.
-    """
-    try:
-        return json.loads(raw_text)
-    except json.JSONDecodeError as e:
-        print(f"Initial JSON parse failed: {e}")
-        
-        # Clean common issues
-        cleaned_text = raw_text.strip()
-        cleaned_text = re.sub(r'```json\s*', '', cleaned_text)
-        cleaned_text = re.sub(r'```\s*$', '', cleaned_text)
-        
-        try:
-            # Find the last complete closing brace
-            last_brace = cleaned_text.rfind('}')
-            if last_brace != -1:
-                truncated_text = cleaned_text[:last_brace + 1]
-                return json.loads(truncated_text)
-        except json.JSONDecodeError:
-            pass
-        
-        # Return fallback
-        print(f"Could not parse JSON, returning fallback. Raw text: {raw_text[:500]}...")
-        return fallback_dict
 
 async def _check_fda(inn_name: str, client: httpx.AsyncClient) -> dict:
     """Checks drug status and gets dosage info from openFDA."""
@@ -107,13 +49,11 @@ async def _check_ema(inn_name: str, client: httpx.AsyncClient) -> dict:
         return {"status": "Error"}
 
 async def _check_with_gemini(inn_name: str, regulator: str) -> dict:
-    """Checks drug status against a regulator using Gemini."""
-    prompt = f"""Проверь статус препарата с МНН '{inn_name}' 
-    в регуляторном органе '{regulator}'.
+    """Checks drug status against a regulator using Gemini with simple text parsing."""
+    prompt = f"""Проверь статус препарата с МНН '{inn_name}' в регуляторном органе '{regulator}'.
     
-    Верни в JSON формате:
-    - status: "Approved", "Not Approved", или "Unknown"
-    - note: краткая заметка на русском языке (1 предложение)"""
+    Ответь кратко: препарат одобрен (Approved), не одобрен (Not Approved) или статус неизвестен (Unknown).
+    Добавь краткую заметку на русском языке."""
     
     try:
         model = genai.GenerativeModel(
@@ -123,19 +63,15 @@ async def _check_with_gemini(inn_name: str, regulator: str) -> dict:
         
         response = await model.generate_content_async(prompt)
         
-        # Try to parse JSON, fallback to safe defaults
-        try:
-            return json.loads(response.text.strip())
-        except json.JSONDecodeError:
-            # Extract status from text if JSON parsing fails
-            text = response.text.lower()
-            if 'approved' in text or 'одобрен' in text:
-                status = "Approved"
-            elif 'not approved' in text or 'не одобрен' in text:
-                status = "Not Approved"
-            else:
-                status = "Unknown"
-            return {"status": status, "note": "Статус определен из текстового ответа"}
+        # Extract status from text response
+        text = response.text.lower()
+        if 'approved' in text or 'одобрен' in text:
+            status = "Approved"
+        elif 'not approved' in text or 'не одобрен' in text:
+            status = "Not Approved"
+        else:
+            status = "Unknown"
+        return {"status": status, "note": response.text.strip()[:200]}
         
     except Exception as e:
         print(f"Error checking {regulator} with Gemini: {e}")
@@ -147,29 +83,44 @@ async def _compare_dosages_with_gemini(source_dosage: str, standard_dosage_text:
         return {"comparison_result": "mismatch"}
 
     prompt = f"""
-    Сравни две дозировки препарата:
-    1. Дозировка из протокола: "{source_dosage}"
-    2. Стандартная дозировка из инструкции: "{standard_dosage_text}"
-    
-    Классифицируй дозировку из протокола относительно стандартной:
-    - within_range: в пределах терапевтического диапазона
-    - below_range: ниже терапевтического диапазона  
-    - above_range: выше терапевтического диапазона
-    - mismatch: невозможно сравнить (разные пути введения, частота и т.д.)
-    """
+Сравни две дозировки препарата:
+1. Дозировка из протокола: "{source_dosage}"
+2. Стандартная дозировка из инструкции: "{standard_dosage_text}"
+
+Ответь одним словом:
+- within_range (в пределах нормы)
+- below_range (ниже нормы)  
+- above_range (выше нормы)
+- mismatch (невозможно сравнить)"""
     
     try:
-        model_with_schema = genai.GenerativeModel(
+        model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
-            generation_config={
-                "temperature": 0.1,
-                "response_mime_type": "application/json",
-                "response_schema": get_dosage_comparison_schema()
-            }
+            generation_config={"temperature": 0.1, "max_output_tokens": 50}
         )
         
-        response = await model_with_schema.generate_content_async(prompt)
-        return clean_and_parse_json(response.text, {"comparison_result": "mismatch"})
+        response = await model.generate_content_async(prompt)
+        
+        # Extract comparison result from text
+        text = response.text.lower().strip()
+        if 'within_range' in text or 'в пределах' in text:
+            result = "within_range"
+        elif 'below_range' in text or 'ниже' in text:
+            result = "below_range"
+        elif 'above_range' in text or 'выше' in text:
+            result = "above_range"
+        else:
+            regulatory_results = {
+                "regulatory_checks": {
+                    "FDA": {"status": "Error"},
+                    "EMA": {"status": "Error"},
+                    "BNF": {"status": "Error"},
+                    "WHO_EML": {"status": "Error"}
+                },
+                "dosage_check": {"comparison_result": "mismatch"}
+            }
+            
+        return {"comparison_result": result}
         
     except Exception as e:
         print(f"Error comparing dosages with Gemini: {e}")
@@ -191,13 +142,11 @@ async def check_all_regulators(inn_name: str, source_dosage: str):
         regulatory_status = dict(zip(tasks.keys(), results))
 
         # Perform dosage check using FDA data
-        fda_result = regulatory_status.get("FDA", {})
+        fda_result = regulatory_results.get("regulatory_checks", {}).get("FDA", {})
         if isinstance(fda_result, dict) and fda_result.get("standard_dosage_text"):
             dosage_comparison = await _compare_dosages_with_gemini(source_dosage, fda_result["standard_dosage_text"])
+            regulatory_results["dosage_check"] = dosage_comparison
         else:
-            dosage_comparison = {"comparison_result": "mismatch"}
+            regulatory_results["dosage_check"] = {"comparison_result": "mismatch"}
 
-        return {
-            "regulatory_checks": regulatory_status,
-            "dosage_check": dosage_comparison
-        }
+        return regulatory_results
