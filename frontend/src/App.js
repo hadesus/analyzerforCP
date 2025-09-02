@@ -15,7 +15,6 @@ const useSortableData = (items, config = null) => {
         const getNestedValue = (obj, path) => path.split('.').reduce((o, k) => (o || {})[k], obj);
         const aValue = getNestedValue(a, sortConfig.key);
         const bValue = getNestedValue(b, sortConfig.key);
-
         if (aValue < bValue) {
           return sortConfig.direction === 'ascending' ? -1 : 1;
         }
@@ -39,12 +38,14 @@ const useSortableData = (items, config = null) => {
   return { items: sortedItems, requestSort, sortConfig };
 };
 
-
 function App() {
-  const [analysisResults, setAnalysisResults] = useState(null);
+  const [analysisData, setAnalysisData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [filterText, setFilterText] = useState('');
+
+  const analysisResults = analysisData?.analysis_results;
+  const documentSummary = analysisData?.document_summary;
 
   const { items: sortedResults, requestSort, sortConfig } = useSortableData(analysisResults);
 
@@ -59,7 +60,6 @@ function App() {
     });
   }, [sortedResults, filterText]);
 
-
   return (
     <div className="App">
       <header className="App-header">
@@ -67,15 +67,21 @@ function App() {
       </header>
       <main>
         <FileUpload
-          onUploadSuccess={setAnalysisResults}
+          onUploadSuccess={setAnalysisData}
           setIsLoading={setIsLoading}
           setErrorMessage={setErrorMessage}
         />
         {isLoading && <div className="loading-indicator">Анализ документа... Это может занять несколько минут.</div>}
         {errorMessage && <div className="error-message">{errorMessage}</div>}
 
-        {analysisResults && (
-          <>
+        {analysisData && (
+          <div className="results-container">
+            {documentSummary && (
+              <div className="summary-container">
+                <h3>Общее резюме документа</h3>
+                <p>{documentSummary}</p>
+              </div>
+            )}
             <input
               type="text"
               placeholder="Фильтр по названию или МНН..."
@@ -89,7 +95,7 @@ function App() {
               requestSort={requestSort}
               sortConfig={sortConfig}
             />
-          </>
+          </div>
         )}
       </main>
     </div>

@@ -89,3 +89,22 @@ Follow these steps to set up and run the project locally.
     The React application will open automatically in your browser at `http://localhost:3000`. The frontend is configured to proxy API requests to the backend server running on port 8000.
 
 You can now upload a `.docx` file through the web interface to start the analysis.
+
+## Running with Docker
+
+The easiest way to get the entire application running is with Docker Compose.
+
+1.  **Ensure Docker is installed** and running on your machine.
+2.  **Configure environment variables:**
+    -   Copy the example environment file in the `backend` directory:
+        ```bash
+        cp backend/.env.example backend/.env
+        ```
+    -   Open `backend/.env` and fill in your API keys.
+3.  **Build and run the services:**
+    -   From the root of the project, run:
+        ```bash
+        docker-compose up --build
+        ```
+    - This command will build the images for the backend and frontend, and start all three services (`backend`, `frontend`, `redis`).
+    - The frontend will be available at `http://localhost:3000`.
