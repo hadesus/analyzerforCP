@@ -3,11 +3,11 @@ import io
 from docx import Document
 
 # Import all our services
-from backend.services import protocol_parser
-from backend.services import drug_normalizer
-from backend.services import regulatory_checker
-from backend.services import pubmed_client
-from backend.services import ai_analyzer
+from services import protocol_parser
+from services import drug_normalizer
+from services import regulatory_checker
+from services import pubmed_client
+from services import ai_analyzer
 
 # Instantiate clients/services that need it
 pubmed = pubmed_client.PubMedClient()
