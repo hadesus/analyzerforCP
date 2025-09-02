@@ -70,6 +70,7 @@ const AuthModal = ({ isOpen, onClose, onAuthSuccess }) => {
           </div>
           
           {error && <div className="auth-error">{error}</div>}
+          }
           
           <button type="submit" className="auth-submit-btn" disabled={loading}>
             {loading ? 'Загрузка...' : (isSignUp ? 'Зарегистрироваться' : 'Войти')}
