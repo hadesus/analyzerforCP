@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -23,16 +23,15 @@ logger.info("✅ Gemini configured successfully")
 
 async def extract_drugs_from_text(text: str) -> list:
     """
-    Uses the EXACT same approach as demo version - unified Gemini extraction.
-    This extracts ALL drug information in one powerful prompt.
+    Extract drugs using EXACT same approach as demo version.
     """
     if not text or not text.strip():
         logger.warning("❌ Empty text provided")
         return []
 
-    logger.info(f"📄 Analyzing text of length: {len(text)} using unified demo approach")
+    logger.info(f"📄 Analyzing text of length: {len(text)} using DEMO approach")
 
-    # EXACT same prompt as demo version for maximum accuracy
+    # EXACT same prompt as demo version
     prompt = f"""Проанализируй следующий текст из клинического протокола. Твоя задача - выступить в роли эксперта по оценке медицинских технологий.
 
 Выполни следующие шаги:
@@ -44,7 +43,7 @@ async def extract_drugs_from_text(text: str) -> list:
    - "route_source": (String) Путь введения (перорально, внутривенно, местно и т.д.).
    - "context_indication": (String) Контекст применения или показание из протокола.
    - "formulary_status": (String) Краткий комментарий о статусе препарата. Так как у тебя нет доступа к внешним базам, напиши "Требует проверки по локальным и международным формулярам (WHO EML, BNF)".
-   - "pubmed_suggestion": (String) Напиши "Требуется поиск в PubMed по запросу '{МНН} AND {основное заболевание из протокола}'". Замени плейсхолдеры.
+   - "pubmed_suggestion": (String) Напиши "Требуется поиск в PubMed по запросу '{{МНН}} AND {{основное заболевание из протокола}}'". Замени плейсхолдеры.
    - "ud_ai_grade": (String) Твоя экспертная оценка уровня убедительности доказательств по шкале GRADE (High, Moderate, Low, Very Low), основываясь на типичном применении препарата для контекста заболевания из протокола.
    - "ai_note": (String) Очень короткая (1-2 предложения) заметка на русском языке, обобщающая ключевые аспекты применения этого препарата в данном контексте.
 
@@ -65,7 +64,7 @@ async def extract_drugs_from_text(text: str) -> list:
 JSON ответ:"""
     
     try:
-        logger.info("🤖 Sending unified extraction request to Gemini (demo approach)...")
+        logger.info("🤖 Sending unified extraction request to Gemini...")
         model = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
             generation_config={
@@ -82,9 +81,8 @@ JSON ответ:"""
             return []
         
         logger.info(f"✅ Gemini response received: {len(response.text)} chars")
-        logger.debug(f"Raw Gemini response: {response.text[:1000]}...")
         
-        # Parse JSON response (same as demo)
+        # Parse JSON response
         try:
             # Clean the response from possible ```json ... ``` wrappers
             cleaned_response = response.text.strip()
@@ -117,65 +115,21 @@ JSON ответ:"""
                     formatted_drugs.append(formatted_drug)
                     logger.info(f"  📋 Found drug: {formatted_drug['drug_name_source']} (INN: {formatted_drug['inn_name']})")
             
-            logger.info(f"✅ Successfully extracted {len(formatted_drugs)} drugs using demo approach")
+            logger.info(f"✅ Successfully extracted {len(formatted_drugs)} drugs")
             return formatted_drugs
             
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON parsing failed: {e}")
             logger.error(f"Raw response: {response.text}")
-            
-            # Fallback: try to extract drugs from text
-            return extract_drugs_from_text_fallback(response.text)
+            return []
         
     except Exception as e:
         logger.error(f"❌ Error during Gemini extraction: {e}")
         logger.error(traceback.format_exc())
         return []
 
-def extract_drugs_from_text_fallback(text: str) -> list:
-    """Fallback extraction when JSON parsing fails."""
-    logger.info("🔄 Using fallback text extraction...")
-    drugs = []
-    
-    # Look for drug patterns in text
-    lines = text.split('\n')
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-            
-        # Try to find drug names (common patterns)
-        drug_patterns = [
-            r'"name_author":\s*"([^"]+)"',
-            r'"drug_name_source":\s*"([^"]+)"',
-            r'препарат[:\s]+([А-Яа-яA-Za-z\s\-]+)',
-            r'лекарство[:\s]+([А-Яа-яA-Za-z\s\-]+)',
-            r'([А-Я][а-я]+(?:\s+[А-Я][а-я]+)*)\s*(?:\d+\s*мг|\d+\s*г|таблетк)'
-        ]
-        
-        for pattern in drug_patterns:
-            matches = re.findall(pattern, line, re.IGNORECASE)
-            for match in matches:
-                drug_name = match.strip()
-                if len(drug_name) > 2 and drug_name not in [d["drug_name_source"] for d in drugs]:
-                    drugs.append({
-                        "drug_name_source": drug_name,
-                        "inn_name": "",
-                        "dosage_source": "",
-                        "route_source": "",
-                        "context_indication": "",
-                        "formulary_status": "",
-                        "pubmed_suggestion": "",
-                        "ud_ai_grade": "",
-                        "ai_note": ""
-                    })
-                    logger.info(f"  📋 Fallback found: {drug_name}")
-    
-    logger.info(f"✅ Fallback extracted {len(drugs)} drugs")
-    return drugs
-
 async def generate_document_summary(text: str) -> str:
-    """Uses Gemini to generate a brief summary of the entire document."""
+    """Generate document summary using Gemini"""
     logger.info("📝 Starting document summary generation...")
     if not text:
         logger.warning("❌ Empty text for summary generation")

@@ -6,36 +6,21 @@ from docx import Document
 
 logger = logging.getLogger(__name__)
 
-# Import all our services
-logger.info("Importing services...")
+# Import services with error handling
 try:
-    logger.info("Importing protocol_parser...")
-    from services import protocol_parser
-    logger.info("✅ protocol_parser imported")
-    
-    logger.info("Importing regulatory_checker...")
-    from services import regulatory_checker
-    logger.info("✅ regulatory_checker imported")
-    
-    logger.info("Importing pubmed_client...")
-    from services import pubmed_client
-    logger.info("✅ pubmed_client imported")
-    
+    from services.protocol_parser import extract_drugs_from_text, generate_document_summary
+    from services.regulatory_checker import check_all_regulators
+    from services.pubmed_client import PubMedClient
+    logger.info("✅ All services imported successfully")
 except ImportError as e:
-    logger.error(f"❌ Import error: {e}")
-    logger.error(f"Traceback: {traceback.format_exc()}")
-    traceback.print_exc()
+    logger.error(f"❌ Service import error: {e}")
     raise
 
-# Instantiate clients/services
-logger.info("Creating PubMed client...")
-pubmed = pubmed_client.PubMedClient()
-logger.info("✅ PubMed client created")
+# Create PubMed client
+pubmed = PubMedClient()
 
 async def process_single_drug(drug_info: dict, document_context: str = ""):
-    """
-    Processes a single drug using the demo approach - most data already extracted.
-    """
+    """Process a single drug with regulatory and PubMed checks"""
     source_name = drug_info.get("drug_name_source")
     inn_name = drug_info.get("inn_name", "")
     
@@ -45,8 +30,8 @@ async def process_single_drug(drug_info: dict, document_context: str = ""):
 
     logger.info(f"💊 Processing drug: {source_name} (INN: {inn_name})")
     
-    # If no INN found by Gemini, skip detailed analysis
-    if not inn_name or inn_name.lower() in ['unknown', 'не определен', '']:
+    # If no INN found by Gemini, return basic data
+    if not inn_name or inn_name.lower() in ['unknown', 'не определен', 'не определено', '']:
         logger.warning(f"⚠️ No INN found for {source_name}, returning basic data")
         return {
             "source_data": drug_info,
@@ -60,19 +45,17 @@ async def process_single_drug(drug_info: dict, document_context: str = ""):
             }
         }
 
-    logger.info(f"✅ Found INN: {inn_name}, proceeding with regulatory and PubMed checks")
+    logger.info(f"✅ Found INN: {inn_name}, proceeding with checks")
     
     try:
-        logger.info(f"🔍 Starting regulatory and PubMed checks for {inn_name}")
-        
         # Enhanced context for PubMed search
         search_context = drug_info.get("context_indication", "")
         if not search_context and document_context:
-            # Use document context if drug context is empty
-            search_context = document_context[:200]  # First 200 chars of document
+            search_context = document_context[:200]
         
         # Run regulatory and PubMed checks in parallel
-        regulatory_task = regulatory_checker.check_all_regulators(
+        logger.info("🔄 Running regulatory and PubMed tasks in parallel...")
+        regulatory_task = check_all_regulators(
             inn_name=inn_name,
             source_dosage=drug_info.get("dosage_source", "")
         )
@@ -83,13 +66,11 @@ async def process_single_drug(drug_info: dict, document_context: str = ""):
             context=search_context
         )
 
-        logger.info("🔄 Running regulatory and PubMed tasks in parallel...")
         regulatory_results, pubmed_articles = await asyncio.gather(
             regulatory_task, 
             pubmed_task, 
             return_exceptions=True
         )
-        logger.info("✅ Parallel tasks completed")
         
         # Handle exceptions in results
         if isinstance(regulatory_results, Exception):
@@ -105,7 +86,7 @@ async def process_single_drug(drug_info: dict, document_context: str = ""):
         regulatory_results = {"regulatory_checks": {}, "dosage_check": {}}
         pubmed_articles = []
 
-    # Build full drug data using demo extracted data + our enhancements
+    # Build full drug data
     full_drug_data = {
         "source_data": drug_info,
         "normalization": {"inn_name": inn_name, "source": "Gemini", "confidence": "high"},
@@ -122,9 +103,7 @@ async def process_single_drug(drug_info: dict, document_context: str = ""):
     return full_drug_data
 
 async def run_analysis_pipeline(file_content: bytes):
-    """
-    Main orchestrator using demo approach - unified extraction with enhancements.
-    """
+    """Main analysis pipeline using demo approach"""
     logger.info("🚀 Starting DEMO-STYLE analysis pipeline")
     logger.info(f"File content size: {len(file_content)} bytes")
     
@@ -161,10 +140,10 @@ async def run_analysis_pipeline(file_content: bytes):
         return {"error": "Документ пуст или не содержит текста."}
 
     try:
-        # Generate summary and extract drugs concurrently (like demo but with summary)
-        logger.info("🔄 Starting summary and UNIFIED drug extraction (demo approach)")
-        summary_task = protocol_parser.generate_document_summary(full_text)
-        extraction_task = protocol_parser.extract_drugs_from_text(full_text)
+        # Generate summary and extract drugs concurrently
+        logger.info("🔄 Starting summary and drug extraction")
+        summary_task = generate_document_summary(full_text)
+        extraction_task = extract_drugs_from_text(full_text)
 
         logger.info("⏳ Waiting for summary and extraction tasks...")
         document_summary, extracted_drugs = await asyncio.gather(
@@ -196,13 +175,12 @@ async def run_analysis_pipeline(file_content: bytes):
             "message": "В документе не найдено лекарственных препаратов."
         }
 
-    logger.info(f"🔄 Processing {len(extracted_drugs)} extracted drugs (demo style)")
+    logger.info(f"🔄 Processing {len(extracted_drugs)} extracted drugs")
     for i, drug in enumerate(extracted_drugs):
         logger.info(f"  Drug {i+1}: {drug.get('drug_name_source', 'Unknown')} (INN: {drug.get('inn_name', 'Unknown')})")
 
     try:
-        logger.info("🔄 Starting parallel drug enhancement (regulatory + PubMed)...")
-        # Pass document context to each drug processing
+        logger.info("🔄 Starting parallel drug enhancement...")
         analysis_tasks = [process_single_drug(drug, full_text[:1000]) for drug in extracted_drugs]
         analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
         logger.info("✅ All drug enhancement tasks completed")
