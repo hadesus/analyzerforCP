@@ -64,11 +64,33 @@ function App() {
 
   return (
     <div className="App">
-      <div className="medical-pattern"></div>
+      <div className="medical-decoration dna">🧬</div>
+      <div className="medical-decoration molecule">⚛️</div>
+      <div className="medical-decoration microscope">🔬</div>
+      
       <header className="App-header">
         <h1>Анализатор Клинических Протоколов</h1>
         <p className="subtitle">Профессиональный анализ медицинских документов с использованием ИИ</p>
+        <div className="features">
+          <div className="feature-badge">
+            <span>🤖</span>
+            <span>ИИ Анализ</span>
+          </div>
+          <div className="feature-badge">
+            <span>🏥</span>
+            <span>Регуляторные Проверки</span>
+          </div>
+          <div className="feature-badge">
+            <span>📊</span>
+            <span>GRADE Оценка</span>
+          </div>
+          <div className="feature-badge">
+            <span>📚</span>
+            <span>PubMed Интеграция</span>
+          </div>
+        </div>
       </header>
+      
       <main>
         <div className="glass-card">
           <FileUpload

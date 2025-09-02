@@ -13,36 +13,71 @@ if not GEMINI_API_KEY:
 
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Set up the model
+# Set up the model with JSON response mode
 generation_config = {
-  "temperature": 0.1,
-  "top_p": 1,
-  "top_k": 1,
-  "max_output_tokens": 8192,
+    "temperature": 0.1,
+    "top_p": 1,
+    "top_k": 1,
+    "max_output_tokens": 8192,
+    "response_mime_type": "application/json",
 }
 
-model = genai.GenerativeModel(model_name="gemini-2.5-flash",
-                              generation_config=generation_config)
+model = genai.GenerativeModel(
+    model_name="gemini-2.0-flash",
+    generation_config=generation_config
+)
 
-def get_extraction_prompt():
-    return """
-    You are a highly skilled medical data analyst. Your task is to analyze the provided text from a clinical protocol and extract all mentions of medications (лекарственные средства).
-    For each medication found, you must extract the following details and return them as a JSON object.
-
-    The JSON output should be a list of objects, where each object represents a single medication entry.
-
-    Here is the required JSON schema for each medication object:
-    {
-      "drug_name_source": "The exact name of the drug as mentioned in the text (e.g., 'Ацетилсалициловая кислота', 'Ибупрофен').",
-      "dosage_source": "The dosage and regimen as mentioned in the text (e.g., '75-150 мг/сут', 'по 1 таблетке 2 раза в день').",
-      "route_source": "The route of administration as mentioned in thetext (e.g., 'внутрь', 'в/в капельно').",
-      "evidence_level_source": "The level of evidence (УДД/УУР) if mentioned for this drug in the text (e.g., 'A1', 'C5'). If not present, use null.",
-      "context_indication": "The clinical context or indication for which the drug is prescribed, based on the surrounding text."
+def get_extraction_schema():
+    """Returns the JSON schema for drug extraction."""
+    return {
+        "type": "object",
+        "properties": {
+            "drugs": {
+                "type": "array",
+                "description": "Список извлеченных лекарственных средств",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "drug_name_source": {
+                            "type": "string",
+                            "description": "Точное название препарата как указано в тексте"
+                        },
+                        "dosage_source": {
+                            "type": "string", 
+                            "description": "Дозировка и режим как указано в тексте"
+                        },
+                        "route_source": {
+                            "type": "string",
+                            "description": "Путь введения как указано в тексте"
+                        },
+                        "evidence_level_source": {
+                            "type": "string",
+                            "description": "Уровень доказательности если указан в тексте"
+                        },
+                        "context_indication": {
+                            "type": "string", 
+                            "description": "Клинический контекст или показание для назначения"
+                        }
+                    },
+                    "required": ["drug_name_source"]
+                }
+            }
+        },
+        "required": ["drugs"]
     }
 
-    Analyze the following text and provide the output in a single valid JSON list. Do not include any explanatory text or markdown formatting before or after the JSON.
-
-    Text to analyze:
+def get_extraction_prompt(text: str):
+    return f"""
+    Проанализируй следующий текст из клинического протокола и извлеки все упоминания лекарственных средств.
+    
+    Для каждого препарата извлеки:
+    - drug_name_source: точное название как указано в тексте
+    - dosage_source: дозировка и режим приема
+    - route_source: путь введения (перорально, в/в, в/м и т.д.)
+    - evidence_level_source: уровень доказательности (УДД/УУР) если указан
+    - context_indication: клинический контекст или показание
+    
+    Текст для анализа:
     ---
     {text}
     ---
@@ -50,49 +85,42 @@ def get_extraction_prompt():
 
 async def extract_drugs_from_text(text: str) -> list:
     """
-    Uses Gemini to extract drug information from text parsed from a clinical protocol.
+    Uses Gemini with JSON schema to extract drug information from clinical protocol text.
     """
-    if not text:
+    if not text or not text.strip():
         return []
 
-    prompt = get_extraction_prompt().format(text=text)
-
+    prompt = get_extraction_prompt(text)
+    
     try:
-        response = await model.generate_content_async(prompt)
-
-        # Clean the response more thoroughly to get only the JSON part
-        json_response_text = response.text.strip()
+        # Configure the model to use JSON schema
+        model_with_schema = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            generation_config={
+                "temperature": 0.1,
+                "top_p": 1,
+                "top_k": 1,
+                "max_output_tokens": 8192,
+                "response_mime_type": "application/json",
+                "response_schema": get_extraction_schema()
+            }
+        )
         
-        # Remove markdown code blocks
-        json_response_text = json_response_text.replace("```json", "").replace("```", "")
+        response = await model_with_schema.generate_content_async(prompt)
         
-        # Remove any leading/trailing whitespace and newlines
-        json_response_text = json_response_text.strip()
+        # Parse the JSON response
+        result_data = json.loads(response.text)
         
-        # Find the first '[' and last ']' to extract just the JSON array
-        start_idx = json_response_text.find('[')
-        end_idx = json_response_text.rfind(']')
+        # Extract the drugs array
+        extracted_drugs = result_data.get("drugs", [])
         
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_response_text = json_response_text[start_idx:end_idx + 1]
+        print(f"Successfully extracted {len(extracted_drugs)} drugs from text")
+        return extracted_drugs
         
-        # Additional cleanup for common issues
-        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
-        
-        print(f"Cleaned JSON response: {json_response_text[:200]}...")  # Debug log
-
-        # Parse the JSON string into a Python list of dictionaries
-        extracted_data = json.loads(json_response_text)
-        
-        # Validate that we got a list
-        if not isinstance(extracted_data, list):
-            print(f"Expected list but got {type(extracted_data)}")
-            return []
-            
-        return extracted_data
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing error: {e}")
+        print(f"Raw response: {response.text if 'response' in locals() else 'No response'}")
+        return {"error": "Failed to parse AI response as JSON", "details": str(e)}
     except Exception as e:
-        # Handle potential errors, e.g., JSON parsing errors or API errors
         print(f"Error during Gemini extraction: {e}")
-        print(f"Raw response text: {response.text if 'response' in locals() else 'No response'}")
-        # In a real app, you'd want more robust error handling/logging
         return {"error": "Failed to extract data using AI", "details": str(e)}

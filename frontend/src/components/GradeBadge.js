@@ -1,7 +1,7 @@
 import React from 'react';
 
 const GradeBadge = ({ grade }) => {
-  if (!grade) return <span className="grade-badge grade-very-low">Не определен</span>;
+  if (!grade) return <span className="grade-badge grade-very-low">❓ Не определен</span>;
 
   const getGradeClass = (grade) => {
     const gradeLower = grade.toLowerCase();
@@ -21,10 +21,19 @@ const GradeBadge = ({ grade }) => {
     return '❓';
   };
 
+  const getGradeDescription = (grade) => {
+    const gradeLower = grade.toLowerCase();
+    if (gradeLower.includes('high')) return 'Высокий уровень доказательности';
+    if (gradeLower.includes('moderate')) return 'Умеренный уровень доказательности';
+    if (gradeLower.includes('low') && !gradeLower.includes('very')) return 'Низкий уровень доказательности';
+    if (gradeLower.includes('very low')) return 'Очень низкий уровень доказательности';
+    return 'Уровень не определен';
+  };
+
   return (
-    <div className={`grade-badge ${getGradeClass(grade)}`}>
+    <div className={`grade-badge ${getGradeClass(grade)}`} title={getGradeDescription(grade)}>
       <span style={{ marginRight: '0.5rem' }}>{getGradeIcon(grade)}</span>
-      {grade}
+      <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{grade}</span>
     </div>
   );
 };

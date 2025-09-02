@@ -85,9 +85,23 @@ const FileUpload = ({ onUploadSuccess, setIsLoading, setErrorMessage }) => {
         onChange={handleFileChange}
         accept=".docx"
       />
-      <div className="upload-icon">📄</div>
+      <div className="upload-icon">📋</div>
       <p>Перетащите .docx файл сюда или нажмите для выбора</p>
       <p className="upload-hint">Поддерживаются только файлы формата .docx</p>
+      <div className="upload-features">
+        <div className="upload-feature">
+          <span className="medical-icon">🔍</span>
+          <span>Автоматическое извлечение препаратов</span>
+        </div>
+        <div className="upload-feature">
+          <span className="medical-icon">🏛️</span>
+          <span>Проверка регуляторных статусов</span>
+        </div>
+        <div className="upload-feature">
+          <span className="medical-icon">📈</span>
+          <span>GRADE анализ доказательности</span>
+        </div>
+      </div>
     </div>
   );
 };

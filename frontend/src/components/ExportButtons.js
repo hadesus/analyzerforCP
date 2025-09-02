@@ -33,7 +33,7 @@ const ExportButtons = ({ results }) => {
   return (
     <div className="export-container">
       <button onClick={() => handleExport('docx')} className="export-btn docx">
-        <span>📄</span>
+        <span>📋</span>
         Экспорт в DOCX
       </button>
       <button onClick={() => handleExport('xlsx')} className="export-btn xlsx">
@@ -41,7 +41,7 @@ const ExportButtons = ({ results }) => {
         Экспорт в Excel (XLSX)
       </button>
       <button onClick={() => handleExport('json')} className="export-btn json">
-        <span>🔧</span>
+        <span>💾</span>
         Экспорт в JSON
       </button>
     </div>

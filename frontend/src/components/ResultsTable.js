@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
 
+import StatusBadge from './StatusBadge';
+import GradeBadge from './GradeBadge';
+
 const ResultsTable = ({ results, requestSort, sortConfig }) => {
   const [expandedRow, setExpandedRow] = useState(null);
 
   if (!results || results.length === 0) {
-    return <div className="loading-indicator">Нет данных для отображения или по вашему фильтру ничего не найдено.</div>;
+    return (
+      <div className="glass-card" style={{ textAlign: 'center', padding: '3rem' }}>
+        <div className="medical-icon" style={{ margin: '0 auto 1rem', fontSize: '3rem' }}>🔍</div>
+        <h3 style={{ color: 'var(--neutral-600)', marginBottom: '0.5rem' }}>Нет данных для отображения</h3>
+        <p style={{ color: 'var(--neutral-500)' }}>По вашему фильтру ничего не найдено или данные не загружены</p>
+      </div>
+    );
   }
 
   const handleRowClick = (index) => {
@@ -64,22 +73,36 @@ const ResultsTable = ({ results, requestSort, sortConfig }) => {
             Дозировка (Источник){getSortIndicator('source_data.dosage_source')}
           </th>
           <th onClick={() => requestSort('ai_analysis.ud_ai_grade')}>
-            Уровень док-ти (AI/GRADE){getSortIndicator('ai_analysis.ud_ai_grade')}
+            🧠 GRADE Анализ{getSortIndicator('ai_analysis.ud_ai_grade')}
           </th>
-          <th>Заметка AI</th>
+          <th>📝 Заметка ИИ</th>
         </tr>
       </thead>
       <tbody>
         {results.map((item, index) => (
           <React.Fragment key={index}>
-            <tr onClick={() => handleRowClick(index)} style={{ cursor: 'pointer' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <strong>{item.normalization?.inn_name || 'Не определено'}</strong>
+                  <small style={{ color: 'var(--neutral-500)', fontFamily: 'JetBrains Mono' }}>
+                    Источник: {item.normalization?.source || 'Неизвестно'}
+                  </small>
+                </div>
               <td>{item.source_data.drug_name_source}</td>
               <td>{item.normalization.inn_name || 'Не определено'}</td>
-              <td>{item.source_data.dosage_source}</td>
+                <div style={{ fontFamily: 'JetBrains Mono', fontSize: '0.9rem' }}>
+                  {item.source_data.dosage_source || 'Не указано'}
+                </div>
               <td>
-                {item.ai_analysis.ud_ai_grade}{' '}
-                <em>({item.ai_analysis.ud_ai_justification})</em>
-              </td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <GradeBadge grade={item.ai_analysis?.ud_ai_grade} />
+                <div style={{ fontSize: '0.8rem', color: 'var(--neutral-600)', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                  {item.ai_analysis?.ud_ai_justification}
+                </div>
+                  <strong>{item.source_data.drug_name_source}</strong>
+                </div>
+                <div style={{ fontSize: '0.9rem', lineHeight: '1.5' }}>
+                  {item.ai_analysis?.ai_summary_note || 'Заметка не сгенерирована'}
+                </div>
               <td>{item.ai_analysis.ai_summary_note}</td>
             </tr>
             {expandedRow === index && (

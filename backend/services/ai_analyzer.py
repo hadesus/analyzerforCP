@@ -9,75 +9,99 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+
+def get_analysis_schema():
+    """Returns the JSON schema for AI analysis."""
+    return {
+        "type": "object",
+        "properties": {
+            "ud_ai_grade": {
+                "type": "string",
+                "description": "GRADE уровень доказательности"
+            },
+            "ud_ai_justification": {
+                "type": "string", 
+                "description": "Краткое обоснование присвоенного уровня"
+            },
+            "ai_summary_note": {
+                "type": "string",
+                "description": "Краткая заметка на русском языке для клинициста"
+            }
+        },
+        "required": ["ud_ai_grade", "ud_ai_justification", "ai_summary_note"]
+    }
 
 def get_final_analysis_prompt(full_drug_data: dict) -> str:
     # Convert dict to a pretty JSON string for clear presentation in the prompt
     context_str = json.dumps(full_drug_data, indent=2, ensure_ascii=False)
 
     return f"""
-    You are a clinical pharmacologist and an expert in evidence-based medicine. Your task is to provide a final analysis of a drug based on the comprehensive data provided below.
+    Ты клинический фармаколог и эксперт по доказательной медицине. Проанализируй данные о препарате и предоставь финальную оценку.
 
-    **Provided Data:**
-    ```json
+    Данные о препарате:
     {context_str}
-    ```
 
-    **Your Tasks:**
+    Задачи:
+    1. Присвой GRADE уровень доказательности: "High", "Moderate", "Low", или "Very Low"
+    2. Дай краткое обоснование (1 предложение)
+    3. Напиши краткую заметку на русском языке для клинициста (1-2 предложения)
 
-    1.  **Generate a GRADE Evidence Level (ud_ai_grade):**
-        Based on all the provided data (especially the source evidence level and the list of PubMed articles), assign a GRADE rating to the evidence for this drug's use in the specified indication.
-        The rating must be one of: "High", "Moderate", "Low", or "Very Low".
-
-    2.  **Provide a Brief Justification:**
-        In one sentence, explain your reasoning for the assigned GRADE rating.
-
-    3.  **Write a Short AI Summary Note (ai_summary_note):**
-        In 1-2 sentences and in **Russian**, write a concise summary for a clinician. The summary should highlight the most critical information, such as the drug's regulatory status, evidence level, and any notable dosage concerns.
-
-    **Output Format:**
-    Your entire response must be a single, valid JSON object with the following keys. Do not include any other text or markdown.
-
-    {{
-      "ud_ai_grade": "...",
-      "ud_ai_justification": "...",
-      "ai_summary_note": "..."
-    }}
+    Учитывай:
+    - Исходный уровень доказательности из протокола
+    - Найденные исследования в PubMed
+    - Статус регистрации в регуляторных органах
+    - Соответствие дозировки стандартам
     """
 
 async def generate_ai_analysis(full_drug_data: dict) -> dict:
     """
-    Generates the final AI analysis (GRADE score and summary) using Gemini.
+    Generates the final AI analysis using Gemini with JSON schema.
     """
     prompt = get_final_analysis_prompt(full_drug_data)
 
     try:
-        response = await gemini_model.generate_content_async(prompt)
+        # Configure model with JSON schema
+        model_with_schema = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            generation_config={
+                "temperature": 0.1,
+                "top_p": 1,
+                "top_k": 1,
+                "max_output_tokens": 2048,
+                "response_mime_type": "application/json",
+                "response_schema": get_analysis_schema()
+            }
+        )
         
-        # Clean the response more thoroughly
-        json_response_text = response.text.strip()
-        json_response_text = json_response_text.replace("```json", "").replace("```", "")
-        json_response_text = json_response_text.strip()
+        response = await model_with_schema.generate_content_async(prompt)
+        analysis = json.loads(response.text)
         
-        # Find the first '{' and last '}' to extract just the JSON object
-        start_idx = json_response_text.find('{')
-        end_idx = json_response_text.rfind('}')
-        
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_response_text = json_response_text[start_idx:end_idx + 1]
-        
-        # Remove newlines that might break JSON parsing
-        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
-        
-        print(f"Cleaned AI analysis JSON: {json_response_text[:200]}...")  # Debug log
-        
-        analysis = json.loads(json_response_text)
+        print(f"Generated AI analysis for drug: {full_drug_data.get('source_data', {}).get('drug_name_source', 'Unknown')}")
         return analysis
-    except Exception as e:
-        print(f"Error during final AI analysis: {e}")
-        print(f"Raw response text: {response.text if 'response' in locals() else 'No response'}")
+        
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing error in AI analysis: {e}")
+        print(f"Raw response: {response.text if 'response' in locals() else 'No response'}")
         return {
             "ud_ai_grade": "Error",
-            "ud_ai_justification": "Failed to generate AI analysis.",
-            "ai_summary_note": "Ошибка при генерации финального анализа."
+            "ud_ai_justification": "Ошибка парсинга ответа ИИ.",
+            "ai_summary_note": "Не удалось сгенерировать анализ из-за ошибки парсинга."
         }
+    except Exception as e:
+        print(f"Error during final AI analysis: {e}")
+        return {
+            "ud_ai_grade": "Error",
+            "ud_ai_justification": "Ошибка при генерации анализа ИИ.",
+            "ai_summary_note": "Произошла ошибка при генерации финального анализа."
+        }
+
+# Export the model for use in other modules
+gemini_model = genai.GenerativeModel(
+    model_name="gemini-2.0-flash",
+    generation_config={
+        "temperature": 0.1,
+        "top_p": 1,
+        "top_k": 1,
+        "max_output_tokens": 8192,
+    }
+)

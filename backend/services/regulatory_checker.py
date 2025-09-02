@@ -11,11 +11,41 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables.")
 genai.configure(api_key=GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
 
 # --- API Base URLs ---
 OPENFDA_API_URL = "https://api.fda.gov/drug/label.json"
 EMA_API_URL = "https://epi.developer.ema.europa.eu/api/retrieval/listbysearchparameter"
+
+def get_regulatory_check_schema():
+    """Returns JSON schema for regulatory checks."""
+    return {
+        "type": "object",
+        "properties": {
+            "status": {
+                "type": "string",
+                "description": "Статус препарата: Approved, Not Approved, или Unknown"
+            },
+            "note": {
+                "type": "string",
+                "description": "Краткая заметка на русском языке"
+            }
+        },
+        "required": ["status", "note"]
+    }
+
+def get_dosage_comparison_schema():
+    """Returns JSON schema for dosage comparison."""
+    return {
+        "type": "object",
+        "properties": {
+            "comparison_result": {
+                "type": "string",
+                "enum": ["within_range", "below_range", "above_range", "mismatch"],
+                "description": "Результат сравнения дозировок"
+            }
+        },
+        "required": ["comparison_result"]
+    }
 
 async def _check_fda(inn_name: str, client: httpx.AsyncClient) -> dict:
     """Checks drug status and gets dosage info from openFDA."""
@@ -49,72 +79,66 @@ async def _check_ema(inn_name: str, client: httpx.AsyncClient) -> dict:
         return {"status": "Error"}
 
 async def _check_with_gemini(inn_name: str, regulator: str) -> dict:
-    """Checks drug status against a regulator using Gemini."""
-    prompt = f"Is the drug with International Nonproprietary Name '{inn_name}' approved by the '{regulator}'? Provide a one-word status: 'Approved', 'Not Approved', or 'Unknown'. Also, provide a very brief, one-sentence note in Russian. Return as a JSON object with keys 'status' and 'note'."
+    """Checks drug status against a regulator using Gemini with JSON schema."""
+    prompt = f"""
+    Проверь статус препарата с международным непатентованным наименованием '{inn_name}' 
+    в регуляторном органе '{regulator}'.
+    
+    Предоставь:
+    - status: "Approved", "Not Approved", или "Unknown"
+    - note: краткая заметка на русском языке (1 предложение)
+    """
+    
     try:
-        response = await gemini_model.generate_content_async(prompt)
+        model_with_schema = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            generation_config={
+                "temperature": 0.1,
+                "response_mime_type": "application/json",
+                "response_schema": get_regulatory_check_schema()
+            }
+        )
         
-        # Clean the response more thoroughly
-        json_response_text = response.text.strip()
-        json_response_text = json_response_text.replace("```json", "").replace("```", "")
-        json_response_text = json_response_text.strip()
+        response = await model_with_schema.generate_content_async(prompt)
+        return json.loads(response.text)
         
-        # Find the first '{' and last '}' to extract just the JSON object
-        start_idx = json_response_text.find('{')
-        end_idx = json_response_text.rfind('}')
-        
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_response_text = json_response_text[start_idx:end_idx + 1]
-        
-        # Remove newlines that might break JSON parsing
-        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
-        
-        return json.loads(json_response_text)
     except Exception as e:
         print(f"Error checking {regulator} with Gemini: {e}")
-        return {"status": "Error", "note": str(e)}
+        return {"status": "Error", "note": f"Ошибка при проверке: {str(e)}"}
 
 async def _compare_dosages_with_gemini(source_dosage: str, standard_dosage_text: str) -> dict:
-    """Uses Gemini to compare source dosage with standard dosage text."""
+    """Uses Gemini with JSON schema to compare dosages."""
     if not source_dosage or not standard_dosage_text:
-        return {"comparison_result": "Not enough data"}
+        return {"comparison_result": "mismatch"}
 
     prompt = f"""
-    Analyze and compare two drug dosages.
-    1. Source Dosage from clinical trial: "{source_dosage}"
-    2. Standard Dosage from official label: "{standard_dosage_text}"
-
-    Based on your analysis, classify the Source Dosage relative to the Standard Dosage.
-    Your output must be a single JSON object with one key "comparison_result" and one of the following four string values:
-    - "within_range": The source dosage is within the standard therapeutic range.
-    - "below_range": The source dosage is lower than the standard therapeutic range.
-    - "above_range": The source dosage is higher than the standard therapeutic range.
-    - "mismatch": The route or frequency is fundamentally different, or it's impossible to compare.
-
-    Provide only the JSON object.
+    Сравни две дозировки препарата:
+    1. Дозировка из протокола: "{source_dosage}"
+    2. Стандартная дозировка из инструкции: "{standard_dosage_text}"
+    
+    Классифицируй дозировку из протокола относительно стандартной:
+    - within_range: в пределах терапевтического диапазона
+    - below_range: ниже терапевтического диапазона  
+    - above_range: выше терапевтического диапазона
+    - mismatch: невозможно сравнить (разные пути введения, частота и т.д.)
     """
+    
     try:
-        response = await gemini_model.generate_content_async(prompt)
+        model_with_schema = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            generation_config={
+                "temperature": 0.1,
+                "response_mime_type": "application/json",
+                "response_schema": get_dosage_comparison_schema()
+            }
+        )
         
-        # Clean the response more thoroughly
-        json_response_text = response.text.strip()
-        json_response_text = json_response_text.replace("```json", "").replace("```", "")
-        json_response_text = json_response_text.strip()
+        response = await model_with_schema.generate_content_async(prompt)
+        return json.loads(response.text)
         
-        # Find the first '{' and last '}' to extract just the JSON object
-        start_idx = json_response_text.find('{')
-        end_idx = json_response_text.rfind('}')
-        
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_response_text = json_response_text[start_idx:end_idx + 1]
-        
-        # Remove newlines that might break JSON parsing
-        json_response_text = json_response_text.replace('\n', ' ').replace('\r', ' ')
-        
-        return json.loads(json_response_text)
     except Exception as e:
         print(f"Error comparing dosages with Gemini: {e}")
-        return {"comparison_result": "Error"}
+        return {"comparison_result": "mismatch"}
 
 async def check_all_regulators(inn_name: str, source_dosage: str):
     """Orchestrates all regulatory and dosage checks."""
@@ -136,7 +160,7 @@ async def check_all_regulators(inn_name: str, source_dosage: str):
         if isinstance(fda_result, dict) and fda_result.get("standard_dosage_text"):
             dosage_comparison = await _compare_dosages_with_gemini(source_dosage, fda_result["standard_dosage_text"])
         else:
-            dosage_comparison = {"comparison_result": "Standard dosage not found"}
+            dosage_comparison = {"comparison_result": "mismatch"}
 
         return {
             "regulatory_checks": regulatory_status,

@@ -1,7 +1,7 @@
 import React from 'react';
 
 const StatusBadge = ({ status, isDosage = false }) => {
-  if (!status) return <span className="status-badge status-not-found">Нет данных</span>;
+  if (!status) return <span className="status-badge status-not-found">❓ Нет данных</span>;
 
   const getStatusClass = (status, isDosage) => {
     if (isDosage) {
@@ -32,18 +32,26 @@ const StatusBadge = ({ status, isDosage = false }) => {
     if (isDosage) {
       switch (status.toLowerCase()) {
         case 'within_range':
-          return 'В норме';
+          return '✅ В норме';
         case 'below_range':
-          return 'Ниже нормы';
+          return '⬇️ Ниже нормы';
         case 'above_range':
-          return 'Выше нормы';
+          return '⬆️ Выше нормы';
         case 'mismatch':
-          return 'Несовместимо';
+          return '❌ Несовместимо';
         default:
-          return status;
+          return `❓ ${status}`;
       }
     }
-    return status;
+    
+    const statusLower = status.toLowerCase();
+    if (statusLower.includes('approved') || statusLower.includes('found')) {
+      return `✅ ${status}`;
+    }
+    if (statusLower.includes('error')) {
+      return `❌ ${status}`;
+    }
+    return `❓ ${status}`;
   };
 
   return (
